@@ -1,0 +1,174 @@
+from __future__ import annotations
+
+import datetime as dt
+import uuid
+from typing import Any, Dict, List, Optional
+
+from .allowlist import is_allowed_source_url
+from .bigquery_writer import insert_rows_bigquery
+from .candidate_filter import filter_candidates_for_profile
+from .config import DEFAULT_PAGE_SIZE, MAX_CANDIDATE_URLS
+from .csv_exporter import export_rows_csv
+from .html_extractor import extract_external_source_fields
+from .profile_reader import get_target_profile
+from .query_builder import build_profile_queries
+from .result_parser import deduplicate_candidates, parse_vertex_results
+from .vertex_search import search_vertex_ai_search
+
+
+def _now_iso() -> str:
+    return dt.datetime.now(dt.timezone.utc).isoformat()
+
+
+def _make_output_row(
+    *,
+    run_id: str,
+    profile_id: str,
+    gap_detector_run_id: Optional[str],
+    candidate: Dict[str, Any],
+    extracted: Dict[str, Any],
+) -> Dict[str, Any]:
+    fallback_excerpt = " | ".join(
+        part for part in [
+            candidate.get("page_title", ""),
+            candidate.get("snippet", "")
+        ]
+        if part
+    )[:2000]
+
+    extraction_status = extracted.get("extraction_status", "")
+    if extraction_status == "fetch_failed" and fallback_excerpt:
+        extraction_status = "metadata_only_fetch_failed"
+
+    return {
+        "source_finder_run_id": run_id,
+        "gap_detector_run_id": gap_detector_run_id or "",
+        "profile_id": profile_id,
+        "query_used": candidate.get("query_used", ""),
+        "source_domain": candidate.get("source_domain", ""),
+        "source_url": candidate.get("source_url", ""),
+        "page_title": candidate.get("page_title", ""),
+        "snippet": candidate.get("snippet", ""),
+        "search_rank": candidate.get("search_rank"),
+        "source_name_found": extracted.get("source_name_found", ""),
+        "source_address_found": extracted.get("source_address_found", ""),
+        "source_city_found": extracted.get("source_city_found", ""),
+        "source_country_found": extracted.get("source_country_found", ""),
+        "source_phone_found": extracted.get("source_phone_found", ""),
+        "source_email_found": extracted.get("source_email_found", ""),
+        "source_website_found": extracted.get("source_website_found", ""),
+        "source_latitude_found": extracted.get("source_latitude_found", ""),
+        "source_longitude_found": extracted.get("source_longitude_found", ""),
+        "source_facilities_text": extracted.get("source_facilities_text", ""),
+        "source_opening_text": extracted.get("source_opening_text", ""),
+        "source_price_text": extracted.get("source_price_text", ""),
+        "source_page_text_excerpt": extracted.get("source_page_text_excerpt", "") or fallback_excerpt,
+        "source_type": "vertex_ai_search_allowlisted_website_with_direct_html_extraction",
+        "extraction_status": extraction_status,
+        "extraction_error": extracted.get("extraction_error", ""),
+        "created_at": _now_iso(),
+    }
+
+
+def run_source_finder(
+    profile_id: str,
+    *,
+    gap_detector_run_id: Optional[str] = None,
+    page_size: int = DEFAULT_PAGE_SIZE,
+    max_candidate_urls: int = MAX_CANDIDATE_URLS,
+    export_csv: bool = False,
+    write_bigquery: bool = True,
+) -> Dict[str, Any]:
+    """Run Source Finder + extraction for one flagged profile."""
+    run_id = str(uuid.uuid4())
+    profile = get_target_profile(profile_id)
+    queries = build_profile_queries(profile)
+
+    if not queries:
+        raise ValueError(f"No usable profile-specific queries could be built for profile_id={profile_id}")
+
+    candidates: List[Dict[str, Any]] = []
+    for query in queries:
+        search_response = search_vertex_ai_search(query=query, page_size=page_size)
+        candidates.extend(parse_vertex_results(search_response, query))
+
+    candidates = deduplicate_candidates(candidates, max_urls=1000)
+
+    # Safety check: even though Vertex AI Search is configured with an allowlist,
+    # direct HTML extraction should only happen for approved source domains.
+    allowed_candidates = []
+    blocked_candidates = []
+
+    for candidate in candidates:
+        source_url = candidate.get("source_url", "")
+        if is_allowed_source_url(source_url):
+            allowed_candidates.append(candidate)
+        else:
+            blocked_candidates.append(source_url)
+
+    if blocked_candidates:
+        print("Blocked candidate URLs outside allowlist:")
+        for blocked_url in blocked_candidates:
+            print(f"  - {blocked_url}")
+
+    candidates = allowed_candidates
+
+    # Keep only candidates that look related to the exact target profile.
+    # This removes broad regional/listing pages that do not mention the profile strongly enough.
+    candidates = filter_candidates_for_profile(candidates, profile, min_score=7.0)
+
+    # Apply max URL cap after allowlist + relevance filtering.
+    candidates = candidates[:max_candidate_urls]
+
+    # Keep only candidates that look like exact profile-level source pages.
+    # This removes regional/listing pages that only mention the profile in snippets.
+    candidates = filter_candidates_for_profile(candidates, profile, min_score=7.0)
+    candidates = candidates[:max_candidate_urls]
+
+    print(f"Candidates kept after profile relevance filtering: {len(candidates)}")
+    for c in candidates:
+        print(f"  kept score={c.get('profile_relevance_score')} url={c.get('source_url')}")
+
+    rows: List[Dict[str, Any]] = []
+    for candidate in candidates:
+        extracted = extract_external_source_fields(candidate["source_url"], profile_context=profile)
+        rows.append(
+            _make_output_row(
+                run_id=run_id,
+                profile_id=profile_id,
+                gap_detector_run_id=gap_detector_run_id,
+                candidate=candidate,
+                extracted=extracted,
+            )
+        )
+
+    table_id = ""
+    if write_bigquery:
+        table_id = insert_rows_bigquery(rows)
+
+    csv_path = ""
+    if export_csv:
+        csv_path = export_rows_csv(rows, profile_id, run_id)
+
+    fallback_excerpt = " | ".join(
+        part for part in [
+            candidate.get("page_title", ""),
+            candidate.get("snippet", "")
+        ]
+        if part
+    )[:2000]
+
+    extraction_status = extracted.get("extraction_status", "")
+    if extraction_status == "fetch_failed" and fallback_excerpt:
+        extraction_status = "metadata_only_fetch_failed"
+
+    return {
+        "source_finder_run_id": run_id,
+        "gap_detector_run_id": gap_detector_run_id or "",
+        "profile_id": profile_id,
+        "queries_used": queries,
+        "candidate_sources_found": len(candidates),
+        "rows_written": len(rows) if write_bigquery else 0,
+        "bigquery_table": table_id,
+        "csv_path": csv_path,
+    }
