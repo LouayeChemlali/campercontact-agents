@@ -1,0 +1,356 @@
+"""BigQuery reads for the moderator frontend. All queries are parameterized."""
+
+import logging
+
+from google.cloud import bigquery
+
+from config import BIGQUERY_PROJECT, BQ_HINTS_TABLE, BQ_QUEUE_TABLE, BQ_SUMMARIES_TABLE
+
+log = logging.getLogger(__name__)
+
+
+def get_client() -> bigquery.Client:
+    """Return a BigQuery client for the configured project."""
+    return bigquery.Client(project=BIGQUERY_PROJECT)
+
+
+# ---------------------------------------------------------------------------
+# Index page
+# ---------------------------------------------------------------------------
+
+def get_recent_profiles(client: bigquery.Client, limit: int = 10) -> list[dict]:
+    """
+    Return the most recently processed profiles.
+
+    Reads from hint_profile_summaries, ordered newest first.
+    Returns plain dicts so templates do not need to import BigQuery types.
+    """
+    query = f"""
+        SELECT
+            CAST(profile_id AS STRING) AS profile_id,
+            profile_name,
+            created_at
+        FROM `{BQ_SUMMARIES_TABLE}`
+        QUALIFY ROW_NUMBER() OVER (
+            PARTITION BY CAST(profile_id AS STRING)
+            ORDER BY created_at DESC
+        ) = 1
+        ORDER BY created_at DESC
+        LIMIT @limit
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("limit", "INT64", int(limit))
+        ]
+    )
+    try:
+        rows = client.query(query, job_config=job_config).result()
+        return [dict(row) for row in rows]
+    except Exception as exc:
+        log.error("get_recent_profiles failed: %s", exc)
+        return []
+
+
+# ---------------------------------------------------------------------------
+# Polling: /api/status/<run_id>
+# ---------------------------------------------------------------------------
+
+def get_profile_status(
+    client: bigquery.Client,
+    profile_ids: list[str],
+    triggered_after: str | None = None,
+) -> dict[str, dict]:
+    """
+    Return the current pipeline state for each requested profile.
+
+    triggered_after is an ISO-8601 timestamp. When provided, only rows
+    written after that time are considered, so stale results from a
+    previous run do not show up as the current run's output.
+
+    Each profile entry contains:
+      hints_ready    bool
+      summary_ready  bool
+      hints          list[dict]  (empty until ready)
+      summary        dict | None
+    """
+    status: dict[str, dict] = {
+        pid: {
+            "hints_ready": False,
+            "summary_ready": False,
+            "hints": [],
+            "summary": None,
+        }
+        for pid in profile_ids
+    }
+
+    if not profile_ids:
+        return status
+
+    hints = _fetch_hints(client, profile_ids, triggered_after)
+    summaries = _fetch_summaries(client, profile_ids, triggered_after)
+
+    by_profile: dict[str, list[dict]] = {}
+    for hint in hints:
+        pid = str(hint.get("profile_id", ""))
+        by_profile.setdefault(pid, []).append(hint)
+
+    for pid, profile_hints in by_profile.items():
+        if pid in status:
+            status[pid]["hints"] = profile_hints
+            status[pid]["hints_ready"] = True
+
+    for summary in summaries:
+        pid = str(summary.get("profile_id", ""))
+        if pid in status:
+            status[pid]["summary"] = summary
+            status[pid]["summary_ready"] = True
+
+    return status
+
+
+def _fetch_hints(
+    client: bigquery.Client,
+    profile_ids: list[str],
+    triggered_after: str | None,
+) -> list[dict]:
+    """Fetch field-level hints for a set of profiles, optionally since a timestamp."""
+    after_clause = "AND created_at > @triggered_after" if triggered_after else ""
+    query = f"""
+        SELECT *
+        FROM `{BQ_HINTS_TABLE}`
+        WHERE CAST(profile_id AS STRING) IN UNNEST(@profile_ids)
+          {after_clause}
+        ORDER BY profile_id, score_delta DESC NULLS LAST
+    """
+    params: list = [
+        bigquery.ArrayQueryParameter(
+            "profile_ids", "STRING", [str(p) for p in profile_ids]
+        )
+    ]
+    if triggered_after:
+        params.append(
+            bigquery.ScalarQueryParameter("triggered_after", "TIMESTAMP", triggered_after)
+        )
+
+    try:
+        rows = client.query(
+            query, job_config=bigquery.QueryJobConfig(query_parameters=params)
+        ).result()
+        return [dict(row) for row in rows]
+    except Exception as exc:
+        log.error("_fetch_hints failed: %s", exc)
+        return []
+
+
+def _fetch_summaries(
+    client: bigquery.Client,
+    profile_ids: list[str],
+    triggered_after: str | None,
+) -> list[dict]:
+    """Fetch profile-level summaries for a set of profiles, optionally since a timestamp."""
+    after_clause = "AND created_at > @triggered_after" if triggered_after else ""
+    query = f"""
+        SELECT *
+        FROM `{BQ_SUMMARIES_TABLE}`
+        WHERE CAST(profile_id AS STRING) IN UNNEST(@profile_ids)
+          {after_clause}
+    """
+    params: list = [
+        bigquery.ArrayQueryParameter(
+            "profile_ids", "STRING", [str(p) for p in profile_ids]
+        )
+    ]
+    if triggered_after:
+        params.append(
+            bigquery.ScalarQueryParameter("triggered_after", "TIMESTAMP", triggered_after)
+        )
+
+    try:
+        rows = client.query(
+            query, job_config=bigquery.QueryJobConfig(query_parameters=params)
+        ).result()
+        return [dict(row) for row in rows]
+    except Exception as exc:
+        log.error("_fetch_summaries failed: %s", exc)
+        return []
+
+
+# ---------------------------------------------------------------------------
+# Priority queue: /queue
+# ---------------------------------------------------------------------------
+
+def get_queue_stats(client: bigquery.Client) -> dict:
+    """
+    Return aggregate statistics about the full priority queue.
+
+    Runs two queries: one for priority/anomaly counts (deduped by sitecode),
+    one for top fields by profile count.
+    """
+    defaults: dict = {
+        "total_profiles": 0,
+        "high_count": 0,
+        "medium_count": 0,
+        "low_count": 0,
+        "anomaly_high": 0,
+        "anomaly_medium": 0,
+        "anomaly_normal": 0,
+        "country_count": 0,
+        "top_fields": [],
+    }
+
+    counts_query = f"""
+        SELECT
+            COUNT(*) AS total_profiles,
+            COUNTIF(integrated_priority_label = 'high_priority')   AS high_count,
+            COUNTIF(integrated_priority_label = 'medium_priority') AS medium_count,
+            COUNTIF(integrated_priority_label = 'low_priority')    AS low_count,
+            COUNTIF(anomaly_review_tier = 'HIGH')                                              AS anomaly_high,
+            COUNTIF(anomaly_review_tier IN ('MEDIUM_KMEANS', 'MEDIUM_AUTOENCODER'))            AS anomaly_medium,
+            COUNTIF(anomaly_review_tier = 'NORMAL')                                            AS anomaly_normal,
+            COUNT(DISTINCT country) AS country_count
+        FROM (
+            SELECT *
+            FROM `{BQ_QUEUE_TABLE}`
+            QUALIFY ROW_NUMBER() OVER (
+                PARTITION BY sitecode
+                ORDER BY integrated_priority_score DESC
+            ) = 1
+        )
+    """
+
+    fields_query = f"""
+        SELECT field_name, COUNT(DISTINCT sitecode) AS profile_count
+        FROM `{BQ_QUEUE_TABLE}`
+        WHERE field_name IS NOT NULL
+        GROUP BY field_name
+        ORDER BY profile_count DESC
+        LIMIT 6
+    """
+
+    try:
+        rows = list(client.query(counts_query).result())
+        if rows:
+            row = dict(rows[0])
+            defaults.update({k: int(v) if v is not None else 0 for k, v in row.items()})
+    except Exception as exc:
+        log.error("get_queue_stats counts query failed: %s", exc)
+
+    try:
+        rows = list(client.query(fields_query).result())
+        defaults["top_fields"] = [
+            {"field_name": r["field_name"], "profile_count": int(r["profile_count"])}
+            for r in rows
+        ]
+    except Exception as exc:
+        log.error("get_queue_stats fields query failed: %s", exc)
+
+    return defaults
+
+
+def get_priority_queue(
+    client: bigquery.Client, limit: int = 50, offset: int = 0
+) -> list[dict]:
+    """
+    Return one page of profiles from the ML priority queue, one row per sitecode.
+
+    Takes the highest-scoring hint per profile, ordered by integrated_priority_score.
+    """
+    query = f"""
+        SELECT
+            sitecode,
+            profile_name,
+            field_name,
+            issue_type,
+            country,
+            estimated_moderator_effort,
+            integrated_priority_label,
+            integrated_priority_score,
+            integrated_queue_rank,
+            anomaly_review_tier,
+            prehint_score,
+            expected_score_uplift
+        FROM `{BQ_QUEUE_TABLE}`
+        QUALIFY ROW_NUMBER() OVER (
+            PARTITION BY sitecode
+            ORDER BY integrated_priority_score DESC, integrated_queue_rank ASC
+        ) = 1
+        ORDER BY integrated_priority_score DESC
+        LIMIT @limit
+        OFFSET @offset
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("limit",  "INT64", int(limit)),
+            bigquery.ScalarQueryParameter("offset", "INT64", int(offset)),
+        ]
+    )
+    try:
+        rows = client.query(query, job_config=job_config).result()
+        return [dict(row) for row in rows]
+    except Exception as exc:
+        log.error("get_priority_queue failed: %s", exc)
+        return []
+
+
+# ---------------------------------------------------------------------------
+# Profile lookup: /profile/<profile_id>
+# ---------------------------------------------------------------------------
+
+def get_hints_for_profile(
+    client: bigquery.Client,
+    profile_id: str,
+) -> list[dict]:
+    """
+    Return the most recent hints for a profile, one per field.
+
+    Uses QUALIFY to keep only the newest hint per field, so re-running the
+    pipeline does not produce duplicates in the view.
+    """
+    query = f"""
+        SELECT *
+        FROM `{BQ_HINTS_TABLE}`
+        WHERE CAST(profile_id AS STRING) = @profile_id
+        QUALIFY ROW_NUMBER() OVER (
+            PARTITION BY CAST(profile_id AS STRING), field_name
+            ORDER BY created_at DESC
+        ) = 1
+        ORDER BY score_delta DESC NULLS LAST
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("profile_id", "STRING", str(profile_id))
+        ]
+    )
+    try:
+        rows = client.query(query, job_config=job_config).result()
+        return [dict(row) for row in rows]
+    except Exception as exc:
+        log.error("get_hints_for_profile failed for %s: %s", profile_id, exc)
+        return []
+
+
+def get_summary_for_profile(
+    client: bigquery.Client,
+    profile_id: str,
+) -> dict | None:
+    """
+    Return the most recent profile-level summary, or None if none exists.
+    """
+    query = f"""
+        SELECT *
+        FROM `{BQ_SUMMARIES_TABLE}`
+        WHERE CAST(profile_id AS STRING) = @profile_id
+        ORDER BY created_at DESC
+        LIMIT 1
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("profile_id", "STRING", str(profile_id))
+        ]
+    )
+    try:
+        rows = list(client.query(query, job_config=job_config).result())
+        return dict(rows[0]) if rows else None
+    except Exception as exc:
+        log.error("get_summary_for_profile failed for %s: %s", profile_id, exc)
+        return None

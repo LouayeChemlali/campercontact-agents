@@ -62,17 +62,6 @@ FIELDS_CONFIG = [
         "threshold": 0.75,
         "enabled": True,
     },
-    # TODO not included in v1 — empty data in source or requires extraction
-    # {"field": "phone", "cc_field": "contact_details_phone", "source_field": "source_phone_found",
-    #  "compare_type": "string_exact", "normalize": "phone", "enabled": False},
-    # {"field": "latitude", "cc_field": "latitude", "source_field": "source_latitude_found",
-    #  "compare_type": "numeric_geo", "enabled": False},
-    # {"field": "longitude", "cc_field": "longitude", "source_field": "source_longitude_found",
-    #  "compare_type": "numeric_geo", "enabled": False},
-    # {"field": "facilities", "cc_field": "facilities", "source_field": "source_facilities_found",
-    #  "compare_type": "boolean", "enabled": False},
-    # {"field": "price", "cc_field": "price_per_night", "source_field": "source_price_found",
-    #  "compare_type": "numeric_directional", "enabled": False},
 ]
 
 ACTIVE_FIELDS = [f for f in FIELDS_CONFIG if f["enabled"]]
