@@ -9,9 +9,9 @@ from config import GD_URL
 
 log = logging.getLogger(__name__)
 
-# Cloud Run services scale to zero when idle. A cold start can take 30-60 s,
-# so we give 90 s for the handoff before declaring a timeout.
-_REQUEST_TIMEOUT = 90
+# The gap detector returns immediately after the BQ queue insert (~2-5 s).
+# 30 s is generous even for a cold-start Cloud Run instance.
+_REQUEST_TIMEOUT = 30
 
 
 @dataclass
@@ -58,6 +58,7 @@ def trigger_pipeline(
         "trigger_entity_matcher": True,
         "entity_matcher_limit": n * 5,  # up to 5 source pages per profile
         "trigger_confidence_agent": True,
+        "trigger_hint_prioritization": True,
         "trigger_hint_generator": True,
         "hint_generator_limit": n * 5,
         "refresh_prioritization": True,
@@ -88,7 +89,7 @@ def trigger_pipeline(
         return PipelineRunResult(
             success=False,
             error_message=(
-                "The Gap Detector did not respond within 90 seconds. "
+                "The Gap Detector did not respond within 30 seconds. "
                 "The service may be cold-starting. Wait a moment and try again."
             ),
         )

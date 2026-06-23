@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import google.auth.transport.requests
 import google.oauth2.id_token
 import requests
-from fastapi import FastAPI
+from fastapi import BackgroundTasks, FastAPI
 from google.cloud import bigquery
+
+log = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -35,6 +38,7 @@ AUTO_TRIGGER_CONFIDENCE_AGENT = os.getenv("AUTO_TRIGGER_CONFIDENCE_AGENT", "fals
 CONFIDENCE_AGENT_AUTH = os.getenv("CONFIDENCE_AGENT_AUTH", "true").lower() == "true"
 
 HINT_GENERATOR_URL = os.getenv("HINT_GENERATOR_URL", "").rstrip("/")
+AUTO_TRIGGER_HINT_PRIORITIZATION = os.getenv("AUTO_TRIGGER_HINT_PRIORITIZATION", "false").lower() == "true"
 AUTO_TRIGGER_HINT_GENERATOR = os.getenv("AUTO_TRIGGER_HINT_GENERATOR", "false").lower() == "true"
 HINT_GENERATOR_AUTH = os.getenv("HINT_GENERATOR_AUTH", "true").lower() == "true"
 
@@ -98,6 +102,23 @@ def _trigger_confidence_agent(*, gap_detector_run_id: str) -> Dict[str, Any]:
     return {"triggered": True, "endpoint": f"{CONFIDENCE_AGENT_URL}/run-confidence-agent", "response": result}
 
 
+def _trigger_hint_prioritization(*, gap_detector_run_id: str) -> Dict[str, Any]:
+    """Call /run-hint-prioritization on the hint generator service.
+
+    This must run AFTER entity matcher and BEFORE hint generator.
+    It reads entity matcher output and writes prioritized candidates that
+    the hint generator then reads to produce hint text.
+    """
+    if not HINT_GENERATOR_URL:
+        return {"triggered": False, "reason": "HINT_GENERATOR_URL not configured"}
+    result = _post(
+        HINT_GENERATOR_URL, "/run-hint-prioritization", HINT_GENERATOR_AUTH,
+        {"gap_detector_run_id": gap_detector_run_id},
+        timeout=300,
+    )
+    return {"triggered": True, "endpoint": f"{HINT_GENERATOR_URL}/run-hint-prioritization", "response": result}
+
+
 def _trigger_hint_generator(*, gap_detector_run_id: str, write_bigquery: bool, limit: Optional[int], refresh_prioritization: bool) -> Dict[str, Any]:
     if not HINT_GENERATOR_URL:
         return {"triggered": False, "reason": "HINT_GENERATOR_URL not configured"}
@@ -113,9 +134,14 @@ def _trigger_hint_generator(*, gap_detector_run_id: str, write_bigquery: bool, l
 
 
 @app.post("/run-gap-detector")
-def run_gap_detector(payload: Optional[Dict[str, Any]] = None):
+def run_gap_detector(background_tasks: BackgroundTasks, payload: Optional[Dict[str, Any]] = None):
     """
     Entry point for the full pipeline.
+
+    Queues the profiles into BigQuery synchronously (fast), then immediately
+    returns the run_id so the frontend can start polling. The remaining stages
+    (Source Finder → Entity Matcher → Confidence Agent → Hint Generator) run in
+    a background task so the HTTP response is not blocked by their combined duration.
 
     Accepts profile_ids to restrict which profiles are queued. When provided,
     only those sitecodes are inserted into the source finder queue. When omitted,
@@ -126,10 +152,9 @@ def run_gap_detector(payload: Optional[Dict[str, Any]] = None):
     write_bigquery = bool(payload.get("write_bigquery", True))
     refresh_prioritization = bool(payload.get("refresh_prioritization", True))
 
-    run_id = f"gap-detector-run-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+    run_id = f"gap-detector-run-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
 
     if profile_ids:
-        # Targeted run: queue only the requested profiles.
         profile_filter = "AND CAST(sitecode AS STRING) IN UNNEST(@profile_ids)"
         params = [
             bigquery.ScalarQueryParameter("run_id", "STRING", run_id),
@@ -167,42 +192,83 @@ def run_gap_detector(payload: Optional[Dict[str, Any]] = None):
     ).result())
     queued_rows = int(count_rows[0]["queued_rows"])
 
-    sf_result: Dict[str, Any] = {"triggered": False}
-    em_result: Dict[str, Any] = {"triggered": False}
-    ca_result: Dict[str, Any] = {"triggered": False}
-    hg_result: Dict[str, Any] = {"triggered": False}
-
-    if bool(payload.get("trigger_source_finder", AUTO_TRIGGER_SOURCE_FINDER)) and queued_rows > 0:
-        sf_limit = int(payload.get("source_finder_limit", min(queued_rows, 5)))
-        sf_result = _trigger_source_finder(
-            limit=sf_limit, write_bigquery=write_bigquery, gap_detector_run_id=run_id
-        )
-
-    if bool(payload.get("trigger_entity_matcher", AUTO_TRIGGER_ENTITY_MATCHER)):
-        em_result = _trigger_entity_matcher(
-            gap_detector_run_id=run_id,
-            write_bigquery=write_bigquery,
-            limit=payload.get("entity_matcher_limit"),
-        )
-
-    if bool(payload.get("trigger_confidence_agent", AUTO_TRIGGER_CONFIDENCE_AGENT)):
-        ca_result = _trigger_confidence_agent(gap_detector_run_id=run_id)
-
-    if bool(payload.get("trigger_hint_generator", AUTO_TRIGGER_HINT_GENERATOR)):
-        hg_result = _trigger_hint_generator(
-            gap_detector_run_id=run_id,
-            write_bigquery=write_bigquery,
-            limit=payload.get("hint_generator_limit"),
-            refresh_prioritization=refresh_prioritization,
-        )
+    # Kick off the pipeline chain asynchronously so we can return immediately.
+    background_tasks.add_task(
+        _run_pipeline_chain,
+        run_id=run_id,
+        payload=payload,
+        queued_rows=queued_rows,
+        write_bigquery=write_bigquery,
+        refresh_prioritization=refresh_prioritization,
+    )
 
     return {
-        "status": "completed",
+        "status": "triggered",
         "gap_detector_run_id": run_id,
         "targeted_profile_ids": profile_ids,
         "queued_rows": queued_rows,
-        "source_finder": sf_result,
-        "entity_matcher": em_result,
-        "confidence_agent": ca_result,
-        "hint_generator": hg_result,
     }
+
+
+def _run_pipeline_chain(
+    *,
+    run_id: str,
+    payload: Dict[str, Any],
+    queued_rows: int,
+    write_bigquery: bool,
+    refresh_prioritization: bool,
+) -> None:
+    """Run SF → EM → Prioritization → CA → HG sequentially.
+
+    Called as a FastAPI BackgroundTask after the HTTP response has been sent.
+    Errors are logged per-stage so one failure does not abort the rest.
+
+    Stage order matters:
+      SF writes sources that EM reads.
+      EM writes candidates that Prioritization scores.
+      Prioritization writes prioritized_hint_candidates that CA and HG read.
+      CA runs after Prioritization to score confidence on the same candidates.
+    """
+    if bool(payload.get("trigger_source_finder", AUTO_TRIGGER_SOURCE_FINDER)) and queued_rows > 0:
+        sf_limit = int(payload.get("source_finder_limit", min(queued_rows, 5)))
+        try:
+            _trigger_source_finder(
+                limit=sf_limit, write_bigquery=write_bigquery, gap_detector_run_id=run_id
+            )
+        except Exception as exc:
+            log.error("[%s] Source Finder failed: %s", run_id, exc)
+
+    if bool(payload.get("trigger_entity_matcher", AUTO_TRIGGER_ENTITY_MATCHER)):
+        try:
+            _trigger_entity_matcher(
+                gap_detector_run_id=run_id,
+                write_bigquery=write_bigquery,
+                limit=payload.get("entity_matcher_limit"),
+            )
+        except Exception as exc:
+            log.error("[%s] Entity Matcher failed: %s", run_id, exc)
+
+    # Prioritization runs after EM: scores EM output and writes
+    # prioritized_hint_candidates which the hint generator then reads.
+    if bool(payload.get("trigger_hint_prioritization", AUTO_TRIGGER_HINT_PRIORITIZATION)):
+        try:
+            _trigger_hint_prioritization(gap_detector_run_id=run_id)
+        except Exception as exc:
+            log.error("[%s] Hint Prioritization failed: %s", run_id, exc)
+
+    if bool(payload.get("trigger_confidence_agent", AUTO_TRIGGER_CONFIDENCE_AGENT)):
+        try:
+            _trigger_confidence_agent(gap_detector_run_id=run_id)
+        except Exception as exc:
+            log.error("[%s] Confidence Agent failed: %s", run_id, exc)
+
+    if bool(payload.get("trigger_hint_generator", AUTO_TRIGGER_HINT_GENERATOR)):
+        try:
+            _trigger_hint_generator(
+                gap_detector_run_id=run_id,
+                write_bigquery=write_bigquery,
+                limit=payload.get("hint_generator_limit"),
+                refresh_prioritization=refresh_prioritization,
+            )
+        except Exception as exc:
+            log.error("[%s] Hint Generator failed: %s", run_id, exc)

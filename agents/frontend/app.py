@@ -108,11 +108,9 @@ def run_pipeline():
     if result.warning:
         flash(result.warning, "warning")
 
-    # Extract key pipeline stats from the response to display in the debug panel.
+    # The gap detector now returns immediately (async pipeline). Only queued_rows
+    # is known at redirect time; SF/EM/CA/HG stats are not yet available.
     data = result.pipeline_data or {}
-    hg = (data.get("hint_generator") or {}).get("response") or {}
-    sf = (data.get("source_finder") or {}).get("response") or {}
-    em = (data.get("entity_matcher") or {}).get("response") or {}
 
     return redirect(
         url_for(
@@ -120,12 +118,7 @@ def run_pipeline():
             run_id=result.run_id,
             triggered_at=triggered_at,
             profile_ids=",".join(ids),
-            gd_queued=data.get("queued_rows", ""),
-            sf_processed=sf.get("items_processed", ""),
-            em_loaded=em.get("profiles_loaded", ""),
-            hg_candidates=(hg.get("prioritization") or {}).get("candidate_rows", ""),
-            hg_hints=hg.get("field_hints_generated", ""),
-            hg_summaries=hg.get("profile_summaries_generated", ""),
+            gd_queued=data.get("queued_rows"),
         )
     )
 
