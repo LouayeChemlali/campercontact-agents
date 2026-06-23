@@ -92,7 +92,12 @@
       const card = document.getElementById('profile-card-' + profile.profile_id);
       if (!card || !card.querySelector('[data-loading]')) continue;
 
-      renderProfile(card, profile, data.run_id);
+      // A profile may be ready with zero hints. Render a "no hints" card in that case.
+      if (profile.hints && profile.hints.length === 0 && !profile.summary) {
+        renderNoHintsCard(card, profile.profile_id);
+      } else {
+        renderProfile(card, profile, data.run_id);
+      }
     }
 
     const total = data.profiles.length;
@@ -103,6 +108,12 @@
     }
 
     if (elapsed >= cfg.timeoutMs / 1000) {
+      // If the pipeline ran long enough that it should be done but returned no rows,
+      // treat it as a "processed with no hints" result rather than a hard timeout.
+      if (readyCount === 0 && elapsed >= 90) {
+        finish('no_hints', 0, total);
+        return;
+      }
       finish('timeout', readyCount, total);
       return;
     }
@@ -126,6 +137,12 @@
 
     if (state === 'success') {
       writeStatus('All results loaded.');
+      return;
+    }
+
+    if (state === 'no_hints') {
+      writeStatus('Pipeline complete. No improvements found for this profile.');
+      showNoHintsBanner();
       return;
     }
 
@@ -368,6 +385,19 @@
   function hideSpinner() {
     const s = document.getElementById('status-spinner');
     if (s) s.classList.add('hidden');
+  }
+
+  function showNoHintsBanner() {
+    const banner = document.getElementById('no-hints-banner');
+    if (banner) banner.classList.remove('hidden');
+  }
+
+  function renderNoHintsCard(card, profileId) {
+    card.querySelector('[data-loading]').remove();
+    const div = document.createElement('div');
+    div.className = 'p-6 text-sm text-gray-500';
+    div.textContent = 'Profile #' + profileId + ' was processed. No improvement hints were generated.';
+    card.appendChild(div);
   }
 
   function showTimeoutBanner() {
