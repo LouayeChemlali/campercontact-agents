@@ -165,14 +165,19 @@ def api_status(run_id):
     status = bigquery_client.get_profile_status(
         bq, ids, triggered_at, gap_detector_run_id=run_id
     )
+    confidence = bigquery_client.get_confidence_scores(bq, ids, gap_detector_run_id=run_id)
 
     profiles = []
     for pid in ids:
         entry = status.get(pid, {})
         hints = _rows_to_json(entry.get("hints", []))
+        # Attach confidence score to each hint by field_name.
+        pid_confidence = confidence.get(pid, {})
+        for hint in hints:
+            field = hint.get("field_name")
+            if field and field in pid_confidence:
+                hint.update(pid_confidence[field])
         summary = _row_to_json(entry.get("summary"))
-        # A profile is "ready" when we have a summary, OR when we have hints,
-        # OR when the run produced zero hints (processed = True, hints empty).
         ready = entry.get("hints_ready", False) or entry.get("summary_ready", False)
         profiles.append({
             "profile_id": pid,

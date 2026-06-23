@@ -31,9 +31,6 @@ class PipelineRunResult:
 def trigger_pipeline(
     profile_ids: list[str],
     *,
-    source_finder_limit: int = 3,
-    entity_matcher_limit: int = 3,
-    hint_generator_limit: int = 10,
     write_bigquery: bool = True,
 ) -> PipelineRunResult:
     """
@@ -53,14 +50,16 @@ def trigger_pipeline(
             ),
         )
 
+    n = len(profile_ids)
     payload: dict = {
         "profile_ids": profile_ids,
         "trigger_source_finder": True,
-        "source_finder_limit": source_finder_limit,
+        "source_finder_limit": n,
         "trigger_entity_matcher": True,
-        "entity_matcher_limit": entity_matcher_limit,
+        "entity_matcher_limit": n * 5,  # up to 5 source pages per profile
+        "trigger_confidence_agent": True,
         "trigger_hint_generator": True,
-        "hint_generator_limit": hint_generator_limit,
+        "hint_generator_limit": n * 5,
         "refresh_prioritization": True,
         "write_bigquery": write_bigquery,
     }
