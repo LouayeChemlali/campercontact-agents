@@ -17,9 +17,8 @@ except Exception:
 PROJECT_ID = "project-62cd3637-0b98-4aa5-8d5"
 DATASET = "primary_dataset"
 
-# Change these table names when Louaye and Joey give you the final tables/views.
-ENTITY_MATCHER_TABLE = os.getenv("ENTITY_MATCHER_TABLE", "mock_entity_matcher_results")
-ML_LAYER_TABLE = os.getenv("ML_LAYER_TABLE", "mock_ml_layer_results")
+ENTITY_MATCHER_TABLE = os.getenv("ENTITY_MATCHER_TABLE", "v_entity_matcher_hints")
+ML_LAYER_TABLE = os.getenv("ML_LAYER_TABLE", "v_ml_layer_hints")
 
 FIELD_HINTS_TABLE = "hint_field_results"
 PROFILE_SUMMARIES_TABLE = "hint_profile_summaries"
@@ -228,7 +227,7 @@ def fetch_joined_inputs(client, profile_id=None, limit=None):
             SAFE_CAST(ml.posthint_score_est AS FLOAT64) AS posthint_score_est,
             CAST(ml.ml_reason AS STRING) AS ml_reason
         FROM `{PROJECT_ID}.{DATASET}.{ENTITY_MATCHER_TABLE}` em
-        INNER JOIN `{PROJECT_ID}.{DATASET}.{ML_LAYER_TABLE}` ml
+        LEFT JOIN `{PROJECT_ID}.{DATASET}.{ML_LAYER_TABLE}` ml
             ON em.profile_id = ml.profile_id
            AND em.field_name = ml.field_name
         {where_clause}
@@ -408,7 +407,9 @@ def print_preview(field_hint_rows, summary_rows):
     for row in field_hint_rows[:10]:
         print(f"\nProfile: {row.get('profile_name')} ({row.get('profile_id')})")
         print(f"Field: {row.get('field_name')}")
-        print(f"Score: {row.get('prehint_score')} -> {row.get('posthint_score_est')} ({row.get('score_delta'):+g})")
+        delta = row.get('score_delta')
+        delta_str = f"({delta:+g})" if delta is not None else "(n/a)"
+        print(f"Score: {row.get('prehint_score')} -> {row.get('posthint_score_est')} {delta_str}")
         print(f"Hint: {row.get('hint_text')}")
         print(f"Action: {row.get('suggested_action')}")
         if row.get("source_domain_internal"):
@@ -417,7 +418,9 @@ def print_preview(field_hint_rows, summary_rows):
     print("\n--- PROFILE SUMMARY PREVIEW ---")
     for row in summary_rows[:10]:
         print(f"\nProfile: {row.get('profile_name')} ({row.get('profile_id')})")
-        print(f"Total estimated score impact: +{row.get('total_estimated_score_delta'):g}")
+        total = row.get('total_estimated_score_delta')
+        total_str = f"+{total:g}" if total is not None else "n/a"
+        print(f"Total estimated score impact: {total_str}")
         print(f"Summary: {row.get('profile_summary_text')}")
 
 
