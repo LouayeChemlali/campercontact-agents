@@ -16,7 +16,7 @@
 
   <div
     id="status-bar"
-    class="flex items-center justify-between gap-4 mb-6"
+    class="flex items-center justify-between gap-4 mb-4"
     role="status"
     aria-live="polite"
     aria-atomic="true"
@@ -41,6 +41,36 @@
     >0:00</span>
   </div>
 
+  {% set s = pipeline_stats %}
+  {% if s.gd_queued or s.hg_hints is not none %}
+  <details class="mb-6 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-500">
+    <summary class="cursor-pointer px-4 py-2 font-medium text-gray-600 select-none list-none flex items-center gap-2">
+      <svg class="w-3.5 h-3.5 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+      Pipeline debug stats
+    </summary>
+    <div class="px-4 pb-3 pt-1 grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1">
+      {% if s.gd_queued %}
+      <span><span class="font-medium text-gray-700">{{ s.gd_queued }}</span> profiles queued</span>
+      {% endif %}
+      {% if s.sf_processed %}
+      <span><span class="font-medium text-gray-700">{{ s.sf_processed }}</span> sources processed</span>
+      {% endif %}
+      {% if s.em_loaded %}
+      <span><span class="font-medium text-gray-700">{{ s.em_loaded }}</span> profiles matched</span>
+      {% endif %}
+      {% if s.hg_candidates %}
+      <span><span class="font-medium text-gray-700">{{ s.hg_candidates }}</span> hint candidates</span>
+      {% endif %}
+      {% if s.hg_hints is not none %}
+      <span><span class="font-medium text-gray-700">{{ s.hg_hints }}</span> field hints generated</span>
+      {% endif %}
+      {% if s.hg_summaries is not none %}
+      <span><span class="font-medium text-gray-700">{{ s.hg_summaries }}</span> profile summaries</span>
+      {% endif %}
+    </div>
+  </details>
+  {% endif %}
+
   <div id="profiles-container" class="space-y-5">
     {% for pid in profile_ids %}
     <div
@@ -56,6 +86,26 @@
       </div>
     </div>
     {% endfor %}
+  </div>
+
+  <div
+    id="no-hints-banner"
+    class="hidden mt-6 bg-blue-50 border border-blue-200 rounded-xl p-5"
+    role="status"
+  >
+    <div class="flex items-start gap-3">
+      <svg class="w-5 h-5 text-blue-400 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 110 20A10 10 0 0112 2z"/>
+      </svg>
+      <div>
+        <p class="text-sm font-semibold text-blue-800">Profile processed - no improvements found.</p>
+        <p class="text-sm text-blue-700 mt-1">
+          The pipeline ran successfully but did not produce any hints for this profile.
+          This is not an error: the external evidence may not have been strong enough to
+          generate a confident suggestion, or the profile data already matches external sources.
+        </p>
+      </div>
+    </div>
   </div>
 
   <div

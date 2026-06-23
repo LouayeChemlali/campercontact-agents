@@ -59,18 +59,21 @@ def get_profile_status(
     client: bigquery.Client,
     profile_ids: list[str],
     triggered_after: str | None = None,
+    gap_detector_run_id: str | None = None,
 ) -> dict[str, dict]:
     """
     Return the current pipeline state for each requested profile.
 
-    triggered_after is an ISO-8601 timestamp. When provided, only rows
-    written after that time are considered, so stale results from a
-    previous run do not show up as the current run's output.
+    When gap_detector_run_id is provided it is used as the primary filter so
+    only results from this specific run are returned. This avoids returning
+    stale hints from an earlier run for the same profile.
+
+    triggered_after is used as a fallback when no gap_detector_run_id is given.
 
     Each profile entry contains:
       hints_ready    bool
       summary_ready  bool
-      hints          list[dict]  (empty until ready)
+      hints          list[dict]
       summary        dict | None
     """
     status: dict[str, dict] = {
@@ -86,8 +89,8 @@ def get_profile_status(
     if not profile_ids:
         return status
 
-    hints = _fetch_hints(client, profile_ids, triggered_after)
-    summaries = _fetch_summaries(client, profile_ids, triggered_after)
+    hints = _fetch_hints(client, profile_ids, triggered_after, gap_detector_run_id)
+    summaries = _fetch_summaries(client, profile_ids, triggered_after, gap_detector_run_id)
 
     by_profile: dict[str, list[dict]] = {}
     for hint in hints:
@@ -112,26 +115,30 @@ def _fetch_hints(
     client: bigquery.Client,
     profile_ids: list[str],
     triggered_after: str | None,
+    gap_detector_run_id: str | None = None,
 ) -> list[dict]:
-    """Fetch field-level hints for a set of profiles, optionally since a timestamp."""
-    after_clause = "AND created_at > @triggered_after" if triggered_after else ""
+    """Fetch field-level hints filtered by run ID when available, else by timestamp."""
+    params: list = [
+        bigquery.ArrayQueryParameter("profile_ids", "STRING", [str(p) for p in profile_ids])
+    ]
+
+    if gap_detector_run_id:
+        # Prefer run-ID filter: avoids picking up old rows for the same profile.
+        extra = "AND CAST(gap_detector_run_id AS STRING) = @gap_detector_run_id"
+        params.append(bigquery.ScalarQueryParameter("gap_detector_run_id", "STRING", gap_detector_run_id))
+    elif triggered_after:
+        extra = "AND created_at > @triggered_after"
+        params.append(bigquery.ScalarQueryParameter("triggered_after", "TIMESTAMP", triggered_after))
+    else:
+        extra = ""
+
     query = f"""
         SELECT *
         FROM `{BQ_HINTS_TABLE}`
         WHERE CAST(profile_id AS STRING) IN UNNEST(@profile_ids)
-          {after_clause}
+          {extra}
         ORDER BY profile_id, score_delta DESC NULLS LAST
     """
-    params: list = [
-        bigquery.ArrayQueryParameter(
-            "profile_ids", "STRING", [str(p) for p in profile_ids]
-        )
-    ]
-    if triggered_after:
-        params.append(
-            bigquery.ScalarQueryParameter("triggered_after", "TIMESTAMP", triggered_after)
-        )
-
     try:
         rows = client.query(
             query, job_config=bigquery.QueryJobConfig(query_parameters=params)
@@ -146,25 +153,28 @@ def _fetch_summaries(
     client: bigquery.Client,
     profile_ids: list[str],
     triggered_after: str | None,
+    gap_detector_run_id: str | None = None,
 ) -> list[dict]:
-    """Fetch profile-level summaries for a set of profiles, optionally since a timestamp."""
-    after_clause = "AND created_at > @triggered_after" if triggered_after else ""
+    """Fetch profile-level summaries filtered by run ID when available, else by timestamp."""
+    params: list = [
+        bigquery.ArrayQueryParameter("profile_ids", "STRING", [str(p) for p in profile_ids])
+    ]
+
+    if gap_detector_run_id:
+        extra = "AND CAST(gap_detector_run_id AS STRING) = @gap_detector_run_id"
+        params.append(bigquery.ScalarQueryParameter("gap_detector_run_id", "STRING", gap_detector_run_id))
+    elif triggered_after:
+        extra = "AND created_at > @triggered_after"
+        params.append(bigquery.ScalarQueryParameter("triggered_after", "TIMESTAMP", triggered_after))
+    else:
+        extra = ""
+
     query = f"""
         SELECT *
         FROM `{BQ_SUMMARIES_TABLE}`
         WHERE CAST(profile_id AS STRING) IN UNNEST(@profile_ids)
-          {after_clause}
+          {extra}
     """
-    params: list = [
-        bigquery.ArrayQueryParameter(
-            "profile_ids", "STRING", [str(p) for p in profile_ids]
-        )
-    ]
-    if triggered_after:
-        params.append(
-            bigquery.ScalarQueryParameter("triggered_after", "TIMESTAMP", triggered_after)
-        )
-
     try:
         rows = client.query(
             query, job_config=bigquery.QueryJobConfig(query_parameters=params)

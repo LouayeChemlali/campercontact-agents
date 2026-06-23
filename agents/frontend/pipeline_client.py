@@ -24,6 +24,8 @@ class PipelineRunResult:
     # Non-None when the pipeline started but with a degraded configuration,
     # for example when the Gap Detector ignored the profile_ids field.
     warning: str | None = None
+    # Full JSON response body from the Gap Detector, used for the debug panel.
+    pipeline_data: dict | None = None
 
 
 def trigger_pipeline(
@@ -144,7 +146,7 @@ def _retry_without_profile_ids(original_payload: dict) -> PipelineRunResult:
 
 
 def _parse_success(response: requests.Response) -> PipelineRunResult:
-    """Extract the run_id from a successful Gap Detector response."""
+    """Extract the run_id and pipeline stats from a successful Gap Detector response."""
     try:
         data = response.json()
     except ValueError:
@@ -157,4 +159,4 @@ def _parse_success(response: requests.Response) -> PipelineRunResult:
     if not run_id:
         log.warning("Gap Detector response missing gap_detector_run_id: %s", data)
 
-    return PipelineRunResult(success=True, run_id=run_id)
+    return PipelineRunResult(success=True, run_id=run_id, pipeline_data=data)

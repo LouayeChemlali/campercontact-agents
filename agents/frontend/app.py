@@ -108,12 +108,24 @@ def run_pipeline():
     if result.warning:
         flash(result.warning, "warning")
 
+    # Extract key pipeline stats from the response to display in the debug panel.
+    data = result.pipeline_data or {}
+    hg = (data.get("hint_generator") or {}).get("response") or {}
+    sf = (data.get("source_finder") or {}).get("response") or {}
+    em = (data.get("entity_matcher") or {}).get("response") or {}
+
     return redirect(
         url_for(
             "results",
             run_id=result.run_id,
             triggered_at=triggered_at,
             profile_ids=",".join(ids),
+            gd_queued=data.get("queued_rows", ""),
+            sf_processed=sf.get("items_processed", ""),
+            em_loaded=em.get("profiles_loaded", ""),
+            hg_candidates=(hg.get("prioritization") or {}).get("candidate_rows", ""),
+            hg_hints=hg.get("field_hints_generated", ""),
+            hg_summaries=hg.get("profile_summaries_generated", ""),
         )
     )
 
@@ -121,14 +133,24 @@ def run_pipeline():
 @app.route("/results/<run_id>")
 def results(run_id):
     """Results page: renders a shell that poll.js fills in as data arrives."""
+    qs = request.args
+    pipeline_stats = {
+        "gd_queued": qs.get("gd_queued"),
+        "sf_processed": qs.get("sf_processed"),
+        "em_loaded": qs.get("em_loaded"),
+        "hg_candidates": qs.get("hg_candidates"),
+        "hg_hints": qs.get("hg_hints"),
+        "hg_summaries": qs.get("hg_summaries"),
+    }
     return render_template(
         "results.html",
         run_id=run_id,
         profile_ids=_ids_from_qs(),
-        triggered_at=request.args.get("triggered_at", ""),
+        triggered_at=qs.get("triggered_at", ""),
         polling_interval=POLLING_INTERVAL_SECONDS,
         polling_timeout=POLLING_TIMEOUT_SECONDS,
         gd_url_set=bool(GD_URL),
+        pipeline_stats=pipeline_stats,
     )
 
 
@@ -137,21 +159,28 @@ def api_status(run_id):
     """Polling endpoint: returns JSON state for each requested profile."""
     ids = _ids_from_qs()
     triggered_at = request.args.get("triggered_at") or None
+    # run_id IS the gap_detector_run_id - use it to filter BQ results to this run only.
 
     bq = bigquery_client.get_client()
-    status = bigquery_client.get_profile_status(bq, ids, triggered_at)
+    status = bigquery_client.get_profile_status(
+        bq, ids, triggered_at, gap_detector_run_id=run_id
+    )
 
     profiles = []
     for pid in ids:
         entry = status.get(pid, {})
+        hints = _rows_to_json(entry.get("hints", []))
+        summary = _row_to_json(entry.get("summary"))
+        # A profile is "ready" when we have a summary, OR when we have hints,
+        # OR when the run produced zero hints (processed = True, hints empty).
         ready = entry.get("hints_ready", False) or entry.get("summary_ready", False)
         profiles.append({
             "profile_id": pid,
             "ready": ready,
             "hints_ready": entry.get("hints_ready", False),
             "summary_ready": entry.get("summary_ready", False),
-            "hints": _rows_to_json(entry.get("hints", [])),
-            "summary": _row_to_json(entry.get("summary")),
+            "hints": hints,
+            "summary": summary,
         })
 
     return jsonify({
