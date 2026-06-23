@@ -21,6 +21,7 @@ POLLING_TIMEOUT_SECONDS: int = int(os.environ.get("POLLING_TIMEOUT_SECONDS", "90
 BQ_DATASET = "primary_dataset"
 BQ_HINTS_TABLE = f"{BIGQUERY_PROJECT}.{BQ_DATASET}.hint_field_results"
 BQ_SUMMARIES_TABLE = f"{BIGQUERY_PROJECT}.{BQ_DATASET}.hint_profile_summaries"
+BQ_CONFIDENCE_TABLE = f"{BIGQUERY_PROJECT}.{BQ_DATASET}.confidence_agent_output"
 BQ_QUEUE_TABLE = (
     f"{BIGQUERY_PROJECT}.hint_prioritization.moderator_hint_queue_with_anomaly_v1"
 )

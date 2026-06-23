@@ -239,6 +239,7 @@
     if (hint.source_url_internal) link.href = hint.source_url_internal;
 
     applyBadge(node.querySelector('[data-field="status_badge"]'), hint.verification_status);
+    applyConfidenceBadge(node.querySelector('[data-field="confidence_badge"]'), hint.confidence_level, hint.confidence_score);
 
     return node;
   }
@@ -316,6 +317,20 @@
     const color = BADGE_CLASSES[status] || 'bg-gray-100 text-gray-700';
     el.className = 'badge ' + color;
     el.textContent = BADGE_LABELS[status] || (status || 'Unknown');
+  }
+
+  const CONFIDENCE_CLASSES = {
+    HIGH:   'bg-green-100 text-green-800',
+    MEDIUM: 'bg-amber-100 text-amber-800',
+    LOW:    'bg-red-100 text-red-800',
+  };
+
+  function applyConfidenceBadge(el, level, score) {
+    if (!el) return;
+    if (!level) { el.classList.add('hidden'); return; }
+    el.className = 'badge ' + (CONFIDENCE_CLASSES[level] || 'bg-gray-100 text-gray-700');
+    el.textContent = level.charAt(0) + level.slice(1).toLowerCase() + ' confidence'
+      + (score != null ? ' (' + (score * 100).toFixed(0) + '%)' : '');
   }
 
   // -------------------------------------------------------------------------

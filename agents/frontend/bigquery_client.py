@@ -4,7 +4,7 @@ import logging
 
 from google.cloud import bigquery
 
-from config import BIGQUERY_PROJECT, BQ_HINTS_TABLE, BQ_QUEUE_TABLE, BQ_SUMMARIES_TABLE
+from config import BIGQUERY_PROJECT, BQ_CONFIDENCE_TABLE, BQ_HINTS_TABLE, BQ_QUEUE_TABLE, BQ_SUMMARIES_TABLE
 
 log = logging.getLogger(__name__)
 
@@ -117,20 +117,41 @@ def _fetch_hints(
     triggered_after: str | None,
     gap_detector_run_id: str | None = None,
 ) -> list[dict]:
-    """Fetch field-level hints filtered by run ID when available, else by timestamp."""
-    params: list = [
+    """Fetch field-level hints filtered by run ID when available, else by timestamp.
+
+    Falls back to timestamp filtering if the gap_detector_run_id column does not
+    yet exist in the table (older deployments).
+    """
+    base_params: list = [
         bigquery.ArrayQueryParameter("profile_ids", "STRING", [str(p) for p in profile_ids])
     ]
 
     if gap_detector_run_id:
-        # Prefer run-ID filter: avoids picking up old rows for the same profile.
-        extra = "AND CAST(gap_detector_run_id AS STRING) = @gap_detector_run_id"
-        params.append(bigquery.ScalarQueryParameter("gap_detector_run_id", "STRING", gap_detector_run_id))
-    elif triggered_after:
+        run_params = base_params + [
+            bigquery.ScalarQueryParameter("gap_detector_run_id", "STRING", gap_detector_run_id)
+        ]
+        run_query = f"""
+            SELECT *
+            FROM `{BQ_HINTS_TABLE}`
+            WHERE CAST(profile_id AS STRING) IN UNNEST(@profile_ids)
+              AND CAST(gap_detector_run_id AS STRING) = @gap_detector_run_id
+            ORDER BY profile_id, score_delta DESC NULLS LAST
+        """
+        try:
+            rows = client.query(
+                run_query, job_config=bigquery.QueryJobConfig(query_parameters=run_params)
+            ).result()
+            return [dict(row) for row in rows]
+        except Exception as exc:
+            # Column may not exist yet - fall through to timestamp filter.
+            log.warning("_fetch_hints run-ID filter failed (%s), falling back to timestamp", exc)
+
+    # Fallback: filter by creation timestamp.
+    params = base_params[:]
+    extra = ""
+    if triggered_after:
         extra = "AND created_at > @triggered_after"
         params.append(bigquery.ScalarQueryParameter("triggered_after", "TIMESTAMP", triggered_after))
-    else:
-        extra = ""
 
     query = f"""
         SELECT *
@@ -155,19 +176,38 @@ def _fetch_summaries(
     triggered_after: str | None,
     gap_detector_run_id: str | None = None,
 ) -> list[dict]:
-    """Fetch profile-level summaries filtered by run ID when available, else by timestamp."""
-    params: list = [
+    """Fetch profile-level summaries filtered by run ID when available, else by timestamp.
+
+    Falls back to timestamp filtering if the gap_detector_run_id column does not
+    yet exist in the table (older deployments).
+    """
+    base_params: list = [
         bigquery.ArrayQueryParameter("profile_ids", "STRING", [str(p) for p in profile_ids])
     ]
 
     if gap_detector_run_id:
-        extra = "AND CAST(gap_detector_run_id AS STRING) = @gap_detector_run_id"
-        params.append(bigquery.ScalarQueryParameter("gap_detector_run_id", "STRING", gap_detector_run_id))
-    elif triggered_after:
+        run_params = base_params + [
+            bigquery.ScalarQueryParameter("gap_detector_run_id", "STRING", gap_detector_run_id)
+        ]
+        run_query = f"""
+            SELECT *
+            FROM `{BQ_SUMMARIES_TABLE}`
+            WHERE CAST(profile_id AS STRING) IN UNNEST(@profile_ids)
+              AND CAST(gap_detector_run_id AS STRING) = @gap_detector_run_id
+        """
+        try:
+            rows = client.query(
+                run_query, job_config=bigquery.QueryJobConfig(query_parameters=run_params)
+            ).result()
+            return [dict(row) for row in rows]
+        except Exception as exc:
+            log.warning("_fetch_summaries run-ID filter failed (%s), falling back to timestamp", exc)
+
+    params = base_params[:]
+    extra = ""
+    if triggered_after:
         extra = "AND created_at > @triggered_after"
         params.append(bigquery.ScalarQueryParameter("triggered_after", "TIMESTAMP", triggered_after))
-    else:
-        extra = ""
 
     query = f"""
         SELECT *
@@ -183,6 +223,56 @@ def _fetch_summaries(
     except Exception as exc:
         log.error("_fetch_summaries failed: %s", exc)
         return []
+
+
+def get_confidence_scores(
+    client: bigquery.Client,
+    profile_ids: list[str],
+    gap_detector_run_id: str | None = None,
+) -> dict[str, dict[str, dict]]:
+    """
+    Return confidence scores from the confidence agent, keyed by profile_id then field_name.
+
+    Returns an empty dict if the table does not exist or has no rows for this run.
+    """
+    if not profile_ids:
+        return {}
+
+    params: list = [
+        bigquery.ArrayQueryParameter("profile_ids", "STRING", [str(p) for p in profile_ids])
+    ]
+    run_filter = ""
+    if gap_detector_run_id:
+        run_filter = "AND CAST(gap_detector_run_id AS STRING) = @gap_detector_run_id"
+        params.append(bigquery.ScalarQueryParameter("gap_detector_run_id", "STRING", gap_detector_run_id))
+
+    query = f"""
+        SELECT
+            CAST(profile_id AS STRING) AS profile_id,
+            field_name,
+            ROUND(confidence_score, 3) AS confidence_score,
+            confidence_level,
+            confidence_decision
+        FROM `{BQ_CONFIDENCE_TABLE}`
+        WHERE CAST(profile_id AS STRING) IN UNNEST(@profile_ids)
+          {run_filter}
+    """
+    try:
+        rows = client.query(query, job_config=bigquery.QueryJobConfig(query_parameters=params)).result()
+        result: dict[str, dict[str, dict]] = {}
+        for row in rows:
+            r = dict(row)
+            pid = r["profile_id"]
+            field = r["field_name"]
+            result.setdefault(pid, {})[field] = {
+                "confidence_score": r["confidence_score"],
+                "confidence_level": r["confidence_level"],
+                "confidence_decision": r["confidence_decision"],
+            }
+        return result
+    except Exception as exc:
+        log.warning("get_confidence_scores failed (table may not exist yet): %s", exc)
+        return {}
 
 
 # ---------------------------------------------------------------------------
