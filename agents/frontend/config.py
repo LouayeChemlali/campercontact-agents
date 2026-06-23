@@ -16,7 +16,7 @@ GD_URL: str = os.environ.get("GD_URL", "").rstrip("/")
 FLASK_SECRET_KEY: str = os.environ.get("FLASK_SECRET_KEY", "dev-only-change-in-production")
 
 POLLING_INTERVAL_SECONDS: int = int(os.environ.get("POLLING_INTERVAL_SECONDS", "5"))
-POLLING_TIMEOUT_SECONDS: int = int(os.environ.get("POLLING_TIMEOUT_SECONDS", "90"))
+POLLING_TIMEOUT_SECONDS: int = int(os.environ.get("POLLING_TIMEOUT_SECONDS", "600"))
 
 BQ_DATASET = "primary_dataset"
 BQ_HINTS_TABLE = f"{BIGQUERY_PROJECT}.{BQ_DATASET}.hint_field_results"
