@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block title %}{{ profile_name }}{% endblock %}
+
+{% block content %}
+{% set CONFIDENCE_CLASSES = {
+  'HIGH':   'bg-green-100 text-green-800',
+  'MEDIUM': 'bg-amber-100 text-amber-800',
+  'LOW':    'bg-red-100 text-red-800',
+} %}
+{% set DECISION_CLASSES = {
+  'show': 'bg-green-100 text-green-800',
+  'recommended_update': 'bg-green-100 text-green-800',
+  'review': 'bg-amber-100 text-amber-800',
+  'manual_review': 'bg-amber-100 text-amber-800',
+  'hide_or_manual_review': 'bg-red-100 text-red-800',
+  'hide': 'bg-red-100 text-red-800',
+} %}
+{% set high_hints = hints | selectattr('confidence_level', 'equalto', 'HIGH') | list %}
+{% set medium_hints = hints | selectattr('confidence_level', 'equalto', 'MEDIUM') | list %}
+{% set low_hints = hints | selectattr('confidence_level', 'equalto', 'LOW') | list %}
+
+<div class="max-w-4xl mx-auto">
+
+  <header class="mb-6">
+    <nav class="flex items-center gap-2 text-sm text-gray-400 mb-2" aria-label="Breadcrumb">
+      <a href="{{ url_for('index') }}" class="hover:text-cc-green transition-colors">Home</a>
+      <span aria-hidden="true">/</span>
+      <span class="text-gray-600 truncate">{{ profile_name }}</span>
+    </nav>
+    <h1 class="text-2xl font-bold text-gray-900">{{ profile_name }}</h1>
+    <p class="mt-1 text-sm text-gray-500">Profile #{{ profile_id }}</p>
+  </header>
+
+  {% if not hints %}
+
+  <div class="bg-white rounded-card shadow-card p-10 text-center">
+    <p class="text-gray-700 font-medium">This profile has no Confidence Agent results yet.</p>
+    <p class="text-sm text-gray-400 mt-1">Run it from the input page to generate final confidence-scored hints.</p>
+  </div>
+
+  {% else %}
+
+  <div class="bg-white rounded-card shadow-card">
+    <div class="p-6">
+
+      <div class="flex items-start justify-between gap-4 mb-5">
+        <div>
+          <h2 class="text-xl font-bold text-gray-900">{{ profile_name }}</h2>
+          <p class="text-sm text-gray-400 mt-0.5">Profile {{ profile_id }}</p>
+        </div>
+        <span class="badge bg-cc-green-lt text-green-800 shrink-0 mt-1" aria-label="Number of hints">
+          {{ high_hints | length }} high · {{ medium_hints | length }} medium · {{ low_hints | length }} low
+        </span>
+      </div>
+
+      {% if summary %}
+      <div class="bg-gray-50 rounded-xl p-4 mb-5">
+        <p class="text-sm text-gray-700 leading-relaxed">
+          {{ summary.profile_summary_text or "Confidence Agent rows are available for this profile." }}
+        </p>
+        {% if summary.created_at %}
+        <p class="text-xs text-gray-400 mt-2">Generated: {{ summary.created_at | datetimeformat }} Amsterdam time</p>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {% if summary and summary.top_actions %}
+      <div class="mb-5">
+        <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Suggested actions</h3>
+        <ol class="list-decimal list-inside space-y-1 text-sm text-gray-700">
+          {% for action in summary.top_actions %}
+          <li>{{ action }}</li>
+          {% endfor %}
+        </ol>
+      </div>
+      {% endif %}
+
+      {% macro hint_card(hint) -%}
+      {% set is_low = hint.confidence_level == 'LOW' %}
+      <div class="border {{ 'border-red-100 bg-red-50/30' if is_low else 'border-gray-100' }} rounded-xl p-4 hover:border-gray-200 transition-colors">
+        <div class="flex items-start justify-between gap-2 mb-2">
+          <div>
+            <span class="text-sm font-semibold text-gray-800">{{ (hint.field_name or '') | replace('_', ' ') | title }}</span>
+            {% if is_low %}
+            <p class="text-xs text-red-700 mt-0.5">Rejected candidate — not recommended for automatic update</p>
+            {% endif %}
+          </div>
+          <div class="flex items-center gap-1.5 shrink-0">
+            <span class="badge {{ CONFIDENCE_CLASSES.get(hint.confidence_level, 'bg-gray-100 text-gray-700') }}">
+              {{ (hint.confidence_level or 'Unknown') | replace('_', ' ') | title }}
+              {% if hint.confidence_score is not none %} ({{ (hint.confidence_score * 100) | round(0) | int }}%){% endif %}
+            </span>
+            <span class="badge {{ DECISION_CLASSES.get((hint.confidence_decision or 'review') | lower, 'bg-gray-100 text-gray-700') }}">
+              {{ (hint.confidence_decision or 'review') | replace('_', ' ') | title }}
+            </span>
+          </div>
+        </div>
+
+        {% if is_low %}
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs mb-3">
+          <div>
+            <span class="block text-gray-400 mb-0.5">Candidate value</span>
+            <span class="text-gray-800 font-medium break-all">{{ hint.source_url_internal or hint.suggested_value or 'Unavailable' }}</span>
+          </div>
+          <div>
+            <span class="block text-gray-400 mb-0.5">Source domain</span>
+            <span class="text-gray-700 break-words">{{ hint.source_domain_internal or "No source domain" }}</span>
+          </div>
+        </div>
+        <p class="text-xs text-gray-600 leading-relaxed mb-2">{{ hint.confidence_reason or "No confidence reason available." }}</p>
+        {% else %}
+        <p class="text-sm text-gray-600 mb-3 leading-relaxed">{{ hint.hint_text or "No hint text available." }}</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs mb-3">
+          <div>
+            <span class="block text-gray-400 mb-0.5">Suggested action</span>
+            <span class="text-gray-800 font-medium break-words">{{ hint.suggested_action or "Review manually" }}</span>
+          </div>
+          <div>
+            <span class="block text-gray-400 mb-0.5">Source domain</span>
+            <span class="text-gray-700 break-words">{{ hint.source_domain_internal or "No source domain" }}</span>
+          </div>
+        </div>
+        <p class="text-xs text-gray-500 leading-relaxed mb-2">{{ hint.confidence_reason or "No confidence reason available." }}</p>
+        {% endif %}
+
+        <div class="flex items-center justify-between text-xs text-gray-400">
+          {% if hint.created_at %}<span>Created: {{ hint.created_at | datetimeformat }} Amsterdam time</span>{% endif %}
+        </div>
+        <details class="mt-3 text-xs text-gray-500">
+          <summary class="cursor-pointer text-gray-400 hover:text-gray-600">Technical details</summary>
+          <div class="mt-2 space-y-0.5">
+            {% for label, value in [
+              ('source_url_internal', hint.source_url_internal),
+              ('source_reliability_score', hint.source_reliability_score),
+              ('normalized_uplift_score', hint.normalized_uplift_score),
+              ('contradiction_penalty', hint.contradiction_penalty),
+              ('confidence_id', hint.confidence_id),
+              ('hint_id', hint.hint_id)
+            ] %}
+              {% if value is not none and value != '' %}
+              <div class="grid grid-cols-3 gap-2 py-0.5">
+                <span class="text-gray-400">{{ label }}</span>
+                <span class="col-span-2 text-gray-600 break-all">{{ value }}</span>
+              </div>
+              {% endif %}
+            {% endfor %}
+          </div>
+        </details>
+      </div>
+      {%- endmacro %}
+
+      {% if high_hints %}
+      <section class="mb-5">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Recommended updates</h3>
+          <span class="text-xs text-gray-400">{{ high_hints | length }} hint{{ 's' if high_hints | length != 1 }}</span>
+        </div>
+        <div class="grid gap-3">
+          {% for hint in high_hints %}{{ hint_card(hint) }}{% endfor %}
+        </div>
+      </section>
+      {% endif %}
+
+      {% if medium_hints %}
+      <section class="mb-5">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Review-needed hints</h3>
+          <span class="text-xs text-gray-400">{{ medium_hints | length }} hint{{ 's' if medium_hints | length != 1 }}</span>
+        </div>
+        <div class="grid gap-3">
+          {% for hint in medium_hints %}{{ hint_card(hint) }}{% endfor %}
+        </div>
+      </section>
+      {% endif %}
+
+      {% if low_hints %}
+      <section>
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Rejected / low-confidence candidates</h3>
+          <span class="text-xs text-gray-400">{{ low_hints | length }} candidate{{ 's' if low_hints | length != 1 }}</span>
+        </div>
+        <details class="bg-red-50 border border-red-100 rounded-xl p-3">
+          <summary class="cursor-pointer text-sm font-medium text-red-800">Show rejected candidates for debugging/manual review</summary>
+          <p class="mt-2 text-xs text-red-700 leading-relaxed">These are not recommended updates. The system kept them hidden because the evidence or entity match was too weak.</p>
+          <div class="grid gap-3 mt-3">
+            {% for hint in low_hints %}{{ hint_card(hint) }}{% endfor %}
+          </div>
+        </details>
+      </section>
+      {% endif %}
+
+    </div>
+  </div>
+
+  {% endif %}
+
+  <div class="mt-6 flex justify-end">
+    <form action="{{ url_for('run_pipeline') }}" method="POST">
+      <input type="hidden" name="profile_ids" value="{{ profile_id }}" />
+      <button
+        type="submit"
+        class="inline-flex items-center gap-2 bg-cc-green hover:bg-cc-green-dk
+               text-white text-sm font-medium px-5 py-2.5 rounded-xl transition-colors
+               focus:outline-none focus:ring-2 focus:ring-cc-green focus:ring-offset-2"
+      >
+        Run this profile again
+      </button>
+    </form>
+  </div>
+
+</div>
+{% endblock %}
