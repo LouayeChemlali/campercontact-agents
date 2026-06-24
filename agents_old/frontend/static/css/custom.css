@@ -1,0 +1,45 @@
+/*
+ * Custom styles for Campercontact Moderator Tools.
+ * Only things that Tailwind CDN cannot express cleanly inline.
+ */
+
+/* Smooth fade-in for result cards as they become available. */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.card-enter {
+  animation: fadeIn 0.2s ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-enter { animation: none; }
+  .spinner    { animation: none; border-top-color: #2DAA47; }
+}
+
+/* Status badge pill base: Tailwind handles colors, this sets the shared shape. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+/* Spinner used on the results page while polling. */
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 3px solid #e5e7eb;
+  border-top-color: #2DAA47;
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

@@ -1,4 +1,5 @@
-fastapi
-uvicorn[standard]
 google-cloud-bigquery
 google-genai
+fastapi
+uvicorn[standard]
+pydantic
