@@ -1,10 +1,12 @@
 # Campercontact Agents
 
-This repository contains the final prototype for the Campercontact AI-supported data-quality pipeline. The project was developed as a modular agent pipeline that detects incomplete Campercontact profiles, searches for external evidence, matches candidate sources to profiles, generates moderator-facing hints, assigns confidence levels, and displays the results in a frontend.
+This repository contains the final prototype for the Campercontact AI-supported data-quality pipeline. The project was developed as a modular agent pipeline that detects incomplete Campercontact profiles, searches for external evidence, compares candidate source data with Campercontact profile data, generates moderator-facing hints, assigns confidence levels, and displays the results in a frontend.
 
 ## Project overview
 
 The pipeline is designed to support Campercontact moderators by identifying profiles that may need improvement and by surfacing possible external evidence. The system does not automatically update Campercontact data. Instead, it produces reviewable hints that can be checked by a human moderator.
+
+BigQuery is used as the shared data layer across the pipeline. The agents read from and write to BigQuery tables, while the frontend displays the final confidence-scored output.
 
 ## Pipeline flow
 
@@ -20,8 +22,6 @@ Hint Prioritization
 Hint Generator
     ↓
 Confidence Agent
-    ↓
-BigQuery
     ↓
 Frontend
 ```
@@ -51,19 +51,19 @@ The Gap Detector identifies missing or incomplete fields in Campercontact profil
 
 ### Source Finder
 
-The Source Finder searches external camping and motorhome-related sources for possible profile evidence. The agent writes candidate source results to BigQuery.
+The Source Finder searches external camping and motorhome-related sources for possible evidence related to Campercontact profiles. It writes candidate source results to BigQuery so that later agents can use them.
 
 ### Entity Matcher
 
-The Entity Matcher compares Campercontact profiles with external source candidates and checks whether they likely refer to the same real-world accommodation.
+The Entity Matcher compares Campercontact profile fields with the external candidate source data. It evaluates fields such as name, address, website, email, phone and location information, and classifies the comparison result using categories such as `MATCH`, `NEW_INFO`, `MISMATCH_INFO` or `NO_DATA`.
 
 ### Hint Prioritization
 
-The prioritization layer ranks candidate hints based on relevance, expected usefulness, and anomaly-related priority signals.
+The prioritization layer ranks candidate hints based on relevance, expected usefulness, and priority signals. This helps decide which hints should be handled first.
 
 ### Hint Generator
 
-The Hint Generator converts matched evidence into moderator-facing hints. These hints are written to BigQuery and later checked by the Confidence Agent.
+The Hint Generator converts matched evidence and profile-level context into moderator-facing hints. It writes both field-level hint results and profile-level summaries to BigQuery.
 
 ### Confidence Agent
 
@@ -98,15 +98,16 @@ confidence-agent
 campercontact-frontend
 ```
 
-Main BigQuery tables:
+Main BigQuery tables used by the final prototype:
 
 ```text
 gap_detector_final.t10_gap_detector_output
 primary_dataset.source_finder_queue
 primary_dataset.profile-info-external-sources
-entity_matcher_pipeline.entity_matcher_output_v2
+entity_matcher_pipeline.entity_matcher_output
 hint_prioritization.prioritized_hint_candidates_v1
 primary_dataset.hint_field_results
+primary_dataset.hint_profile_summaries
 primary_dataset.hint_confidence_results
 ```
 
@@ -118,29 +119,20 @@ Use `.env.example` as the template for required environment variables.
 cp .env.example .env
 ```
 
-Do not commit `.env`, service account keys, or any credential files.
+Do not commit `.env`, service account keys, or credential files.
 
-Typical environment variables include:
+The project uses service-specific environment variables. Some services use generic names such as `OUTPUT_TABLE`, while others use URL, authentication, polling, and trigger flags. Check the relevant agent folder and `.env.example` before deploying a service.
+
+Common configuration categories include:
 
 ```text
 PROJECT_ID
 REGION
-GAP_OUTPUT_TABLE
-SOURCE_QUEUE_TABLE
-SOURCE_OUTPUT_TABLE
-ENTITY_MATCHER_OUTPUT_TABLE
-PRIORITIZED_HINT_TABLE
-HINT_OUTPUT_TABLE
-CONFIDENCE_OUTPUT_TABLE
-SOURCE_FINDER_URL
-ENTITY_MATCHER_URL
-HINT_GENERATOR_URL
-CONFIDENCE_AGENT_URL
-GD_URL
-GD_AUTH
-POLLING_INTERVAL_SECONDS
-POLLING_TIMEOUT_SECONDS
-PIPELINE_REQUEST_TIMEOUT_SECONDS
+OUTPUT_TABLE
+service URL variables such as SOURCE_FINDER_URL, ENTITY_MATCHER_URL, HINT_GENERATOR_URL and CONFIDENCE_AGENT_URL
+authentication flags such as SOURCE_FINDER_AUTH, ENTITY_MATCHER_AUTH, HINT_GENERATOR_AUTH and CONFIDENCE_AGENT_AUTH
+auto-trigger flags such as AUTO_TRIGGER_SOURCE_FINDER, AUTO_TRIGGER_ENTITY_MATCHER, AUTO_TRIGGER_HINT_GENERATOR and AUTO_TRIGGER_CONFIDENCE_AGENT
+frontend variables such as GD_URL, GD_AUTH, POLLING_INTERVAL_SECONDS, POLLING_TIMEOUT_SECONDS and PIPELINE_REQUEST_TIMEOUT_SECONDS
 ```
 
 ## Local setup
@@ -185,13 +177,6 @@ Each service may require additional environment variables. Use `.env.example` an
 ## Final testing
 
 The final environment was tested across multiple Campercontact profiles to check whether the full pipeline could run end-to-end. The tests confirmed that the deployed services can trigger each other in sequence and that the final confidence-scored hints are written to BigQuery and shown in the frontend.
-
-One example profile used during the final frontend demonstration was:
-
-```text
-profile_id: 19060
-profile_name: Parking
-```
 
 A successful run follows this sequence:
 
