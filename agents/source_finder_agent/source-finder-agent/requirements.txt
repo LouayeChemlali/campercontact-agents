@@ -1,7 +1,0 @@
-google-auth
-google-cloud-bigquery
-requests
-beautifulsoup4
-flask
-gunicorn
-pandas

@@ -1,6 +1,7 @@
 -- Output table 1: one row per field-level/action-level hint
 CREATE TABLE IF NOT EXISTS `project-62cd3637-0b98-4aa5-8d5.primary_dataset.hint_field_results` (
   hint_id STRING,
+  gap_detector_run_id STRING,
   profile_id STRING,
   profile_name STRING,
   field_name STRING,
@@ -30,6 +31,7 @@ CREATE TABLE IF NOT EXISTS `project-62cd3637-0b98-4aa5-8d5.primary_dataset.hint_
 -- Output table 2: one row per profile-level summary, built from the field-level hints
 CREATE TABLE IF NOT EXISTS `project-62cd3637-0b98-4aa5-8d5.primary_dataset.hint_profile_summaries` (
   summary_id STRING,
+  gap_detector_run_id STRING,
   profile_id STRING,
   profile_name STRING,
 

@@ -3,11 +3,20 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BIGQUERY_PROJECT = os.environ["BIGQUERY_PROJECT"]
-CC_TABLE = os.environ["CC_TABLE"]
-SOURCE_TABLE = os.environ["SOURCE_TABLE"]
-GAP_TABLE = os.environ["GAP_TABLE"]
-OUTPUT_TABLE = os.environ["OUTPUT_TABLE"]
+# Keep defaults aligned with the already deployed Gap Detector and Source Finder.
+BIGQUERY_PROJECT = os.getenv("BIGQUERY_PROJECT", os.getenv("PROJECT_ID", "project-62cd3637-0b98-4aa5-8d5"))
+CC_TABLE = os.getenv("CC_TABLE", "primary_dataset.profile_master_sitecode_clean")
+SOURCE_TABLE = os.getenv("SOURCE_TABLE", "primary_dataset.profile-info-external-sources")
+GAP_TABLE = os.getenv("GAP_TABLE", "gap_detector_final.t10_gap_detector_output")
+OUTPUT_TABLE = os.getenv("OUTPUT_TABLE", "entity_matcher_pipeline.entity_matcher_output")
+
+# Source Finder may return useful page metadata even if direct HTML extraction failed,
+# but v1 matching only compares extracted field values. Keep this strict by default.
+SOURCE_SUCCESS_STATUSES = [
+    s.strip()
+    for s in os.getenv("SOURCE_SUCCESS_STATUSES", "success").split(",")
+    if s.strip()
+]
 
 # Field configuration: one entry per field to compare.
 FIELDS_CONFIG = [
@@ -62,6 +71,17 @@ FIELDS_CONFIG = [
         "threshold": 0.75,
         "enabled": True,
     },
+    # TODO not included in v1 — empty data in source or requires extraction
+    # {"field": "phone", "cc_field": "contact_details_phone_number", "source_field": "source_phone_found",
+    #  "compare_type": "string_exact", "normalize": "phone", "enabled": False},
+    # {"field": "latitude", "cc_field": "latitude", "source_field": "source_latitude_found",
+    #  "compare_type": "numeric_geo", "enabled": False},
+    # {"field": "longitude", "cc_field": "longitude", "source_field": "source_longitude_found",
+    #  "compare_type": "numeric_geo", "enabled": False},
+    # {"field": "facilities", "cc_field": "facilities", "source_field": "source_facilities_text",
+    #  "compare_type": "boolean", "enabled": False},
+    # {"field": "price", "cc_field": "price_per_night", "source_field": "source_price_text",
+    #  "compare_type": "numeric_directional", "enabled": False},
 ]
 
 ACTIVE_FIELDS = [f for f in FIELDS_CONFIG if f["enabled"]]
