@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# runs source finder for a single profile — searches vertex AI, filters candidates, fetches HTML, writes to BQ
+
 import datetime as dt
 import uuid
 import re

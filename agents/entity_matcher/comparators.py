@@ -1,7 +1,9 @@
 import re
 from rapidfuzz import fuzz
 
-# Verification status constants
+# comparison functions used by the entity matcher — each returns (status, score)
+
+# verification status constants
 MATCH = "MATCH"
 CC_LOWER_RATE = "CC_LOWER_RATE"
 CC_HIGHER_RATE = "CC_HIGHER_RATE"
@@ -58,6 +60,7 @@ def compare_string_exact(cc_val, src_val, normalize: str | None = None) -> tuple
     return (MISMATCH_INFO, 0.0)
 
 
+# fuzzy threshold defaults to 0.85 for name/city/country, lower for address (0.75)
 def compare_string_fuzzy(cc_val, src_val, threshold: float = 0.85) -> tuple[str, float]:
     check = _empty_check(cc_val, src_val)
     if check is not None:

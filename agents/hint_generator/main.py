@@ -14,6 +14,8 @@ except Exception:
     types = None
 
 
+# generates moderator hints using gemini, falls back to a template if the model is unavailable
+
 PROJECT_ID = "project-62cd3637-0b98-4aa5-8d5"
 DATASET = "primary_dataset"
 
@@ -63,6 +65,7 @@ def clean_text(value):
     return str(value).strip()
 
 
+# values that look like template artifacts — don't pass these to gemini as real data
 _PLACEHOLDER_VALUES = {
     "the current value",
     "current value",
@@ -116,6 +119,7 @@ def build_gemini_client():
     )
 
 
+# low temperature keeps the output factual and consistent across runs
 def call_gemini(prompt, max_output_tokens=220):
     client = build_gemini_client()
 

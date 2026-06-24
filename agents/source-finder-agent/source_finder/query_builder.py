@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# builds multiple specific search queries per profile to maximize coverage across different field combinations
+
 from typing import Any, Dict, List
 from urllib.parse import urlparse
 

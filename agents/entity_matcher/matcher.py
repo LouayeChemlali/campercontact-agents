@@ -1,4 +1,7 @@
 import json
+
+# compares CC profile fields against external source values, guided by gap detector output
+
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
@@ -21,6 +24,7 @@ _COMPARATORS = {
     "boolean": compare_boolean,
 }
 
+# maps gap detector recommended_actions text to the fields we should actually compare
 _FIELD_KEYWORDS = {
     "email": ["email", "e-mail", "mail"],
     "website": ["website", "web site", "site", "url", "link"],

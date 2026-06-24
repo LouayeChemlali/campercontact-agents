@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# HTTP wrapper that exposes the entity matcher as a Cloud Run service
+
 from typing import Any, Optional
 
 from fastapi import FastAPI

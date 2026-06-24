@@ -1,4 +1,7 @@
 import datetime
+
+# reads hint rows from BQ, scores each one, writes confidence results back
+
 import os
 import uuid
 from typing import Any, Dict, List, Optional
@@ -71,6 +74,7 @@ def domain_from_row(row: Dict[str, Any]) -> str:
     return urlparse(url).netloc.lower().replace("www.", "")
 
 
+# known camping platforms score higher than generic or social media sites
 def source_reliability_score(domain: str) -> float:
     domain = (domain or "").lower()
 
@@ -161,6 +165,7 @@ def hint_quality_score(row: Dict[str, Any]) -> float:
     return clamp(score)
 
 
+# catches cases where we only found a source page, not an actual field value
 def is_weak_external_website_hint(row: Dict[str, Any]) -> bool:
     suggested_value = clean_string(row.get("suggested_value"))
     source_url = clean_string(row.get("source_url_internal"))
@@ -196,6 +201,7 @@ def confidence_reason(
     )
 
 
+# entity match carries the most weight (0.55) since it's the strongest direct signal
 def score_confidence(row: Dict[str, Any]) -> Dict[str, Any]:
     entity_score = clamp(safe_float(row.get("entity_match_score"), 0.50) or 0.50)
     domain = domain_from_row(row)

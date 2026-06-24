@@ -1,4 +1,7 @@
 import argparse
+
+# loads source evidence, CC profiles, and gap rows from BQ, runs comparisons, writes results back
+
 from collections import Counter
 from typing import Any
 
@@ -48,6 +51,7 @@ def run_entity_matcher(
             **summary,
         }
 
+    # pull unique profile IDs from the source rows so we only load profiles we actually have evidence for
     effective_sitecodes = sorted({str(r.get("profile_id") or "").strip() for r in source_rows if r.get("profile_id")})
     if profile_ids:
         requested = {str(p).strip() for p in profile_ids}

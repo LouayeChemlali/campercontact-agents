@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# FastAPI endpoints for the hint generator service
+
 from typing import Any, Optional
 
 from fastapi import FastAPI

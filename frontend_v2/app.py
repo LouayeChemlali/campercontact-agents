@@ -28,9 +28,7 @@ _AMS = ZoneInfo("Europe/Amsterdam")
 _MAX_IDS = 50
 
 
-# ---------------------------------------------------------------------------
-# Template filter
-# ---------------------------------------------------------------------------
+# template filters
 
 @app.template_filter("datetimeformat")
 def datetimeformat(value):
@@ -57,9 +55,7 @@ def thousands_filter(n):
         return n or 0
 
 
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
+# routes
 
 @app.route("/")
 def index():

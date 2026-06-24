@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# SQL-based hint prioritization — deduplicates entity matcher output and ranks candidates by priority score
+
 import datetime
 import os
 import uuid
@@ -120,6 +122,7 @@ def refresh_prioritized_candidates(
         # For safety, do not delete all historical candidates unless explicitly scoped.
         pass
 
+    # join anomaly scores if the table exists, otherwise default everything to NORMAL
     anomaly_join = ""
     anomaly_select = """
       'NORMAL' AS anomaly_review_tier,
@@ -141,6 +144,7 @@ def refresh_prioritized_candidates(
           SAFE_CAST(anomalies.autoencoder_mean_squared_error AS FLOAT64) AS autoencoder_mean_squared_error,
         """
 
+    # keep one best candidate per profile+field, then add anomaly bonus to get the integrated priority score
     insert_query = f"""
     INSERT INTO {_table_ref(PRIORITIZED_CANDIDATES_TABLE)} (
       hint_candidate_id,

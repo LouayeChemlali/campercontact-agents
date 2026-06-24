@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# fetches and parses HTML from source pages to extract structured field values like email, address, phone
+
 import json
 import re
 from typing import Any, Dict, Iterable, List, Optional

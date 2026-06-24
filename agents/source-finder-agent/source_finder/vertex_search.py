@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# sends queries to the Vertex AI Search engine configured for campercontact sources
+
 from typing import Any, Dict
 
 import requests

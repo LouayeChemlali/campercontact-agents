@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# central orchestrator — queues profiles in BigQuery then fires each agent in sequence
+
 import os
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -302,6 +304,7 @@ def run_gap_detector(payload: Optional[Dict[str, Any]] = None):
     result = list(client.query(count_query, job_config=count_job_config).result())
     queued_rows = int(result[0]["queued_rows"])
 
+    # each stage only runs if its flag is set — defaults come from env vars
     should_trigger_source_finder = bool(payload.get("trigger_source_finder", AUTO_TRIGGER_SOURCE_FINDER))
     should_trigger_entity_matcher = bool(payload.get("trigger_entity_matcher", AUTO_TRIGGER_ENTITY_MATCHER))
     should_trigger_hint_generator = bool(payload.get("trigger_hint_generator", AUTO_TRIGGER_HINT_GENERATOR))

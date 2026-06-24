@@ -25,9 +25,7 @@ def get_client() -> bigquery.Client:
     return bigquery.Client(project=BIGQUERY_PROJECT)
 
 
-# ---------------------------------------------------------------------------
-# Confidence Agent results - final frontend source of truth
-# ---------------------------------------------------------------------------
+# confidence results are the single source of truth for everything the frontend shows
 
 def get_recent_profiles(client: bigquery.Client, limit: int = 10) -> list[dict]:
     """Return recently processed profiles from the final confidence table."""

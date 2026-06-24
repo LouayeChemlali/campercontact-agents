@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# scores search results and removes generic listing or category pages before we fetch HTML
+
 import re
 from typing import Any, Dict, List
 from urllib.parse import urlparse
