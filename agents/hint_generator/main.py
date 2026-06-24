@@ -63,6 +63,48 @@ def clean_text(value):
     return str(value).strip()
 
 
+_PLACEHOLDER_VALUES = {
+    "the current value",
+    "current value",
+    "the suggested improvement",
+    "suggested improvement",
+    "none",
+    "null",
+    "nan",
+    "n/a",
+    "unknown",
+    "",
+}
+
+
+def is_placeholder_value(value):
+    """Return True when a value is only a template placeholder, not real evidence."""
+    text = clean_text(value)
+    if not text:
+        return True
+    return text.lower().strip(" '\".") in _PLACEHOLDER_VALUES
+
+
+def moderator_value_text(value, field_name, *, role):
+    """Format current/suggested values so templates never show fake placeholders."""
+    field_label = clean_text(field_name) or "this field"
+    if is_placeholder_value(value):
+        if role == "current":
+            return f"the current {field_label} value appears to be missing or unavailable"
+        return f"a possible {field_label} improvement was detected, but the exact value should be checked"
+    return clean_text(value)
+
+
+def normalize_input_row(row):
+    """Remove known placeholder values before prompting or writing hint text."""
+    normalized = dict(row)
+    if is_placeholder_value(normalized.get("current_value")):
+        normalized["current_value"] = ""
+    if is_placeholder_value(normalized.get("suggested_value")):
+        normalized["suggested_value"] = ""
+    return normalized
+
+
 def build_gemini_client():
     if genai is None:
         raise RuntimeError("google-genai is not installed. Run: pip install -r requirements.txt")
@@ -97,8 +139,12 @@ def fallback_field_hint(row):
     """Deterministic backup if Gemini is disabled or unavailable."""
     profile_name = clean_text(row.get("profile_name")) or "this profile"
     field_name = clean_text(row.get("field_name")) or "this field"
-    current_value = clean_text(row.get("current_value")) or "the current value"
-    suggested_value = clean_text(row.get("suggested_value")) or "the suggested improvement"
+    current_value = moderator_value_text(row.get("current_value"), field_name, role="current")
+    suggested_value = moderator_value_text(row.get("suggested_value"), field_name, role="suggested")
+    if is_placeholder_value(row.get("current_value")):
+        current_clause = current_value[:1].upper() + current_value[1:]
+    else:
+        current_clause = f"The current value is '{current_value}'"
     pre = row.get("prehint_score")
     post = row.get("posthint_score_est")
     delta = row.get("score_delta")
@@ -114,13 +160,17 @@ def fallback_field_hint(row):
     reason_sentence = f" Reason: {ml_reason}" if ml_reason else ""
 
     return (
-        f"{profile_name} may need an update for '{field_name}'. The current value is '{current_value}', "
+        f"{profile_name} may need an update for '{field_name}'. {current_clause}, "
         f"while the suggested improvement is '{suggested_value}'.{score_sentence} "
         f"A moderator should review this before updating the profile.{reason_sentence}"
     ).strip()
 
 
 def build_field_hint_prompt(row):
+    field_name = clean_text(row.get("field_name")) or "this field"
+    current_value_text = moderator_value_text(row.get("current_value"), field_name, role="current")
+    suggested_value_text = moderator_value_text(row.get("suggested_value"), field_name, role="suggested")
+
     return f"""
 {SYSTEM_STYLE_RULES}
 
@@ -131,8 +181,8 @@ profile_id: {row.get('profile_id')}
 profile_name: {row.get('profile_name')}
 field_name: {row.get('field_name')}
 recommendation_type: {row.get('recommendation_type')}
-current_value: {row.get('current_value')}
-suggested_value: {row.get('suggested_value')}
+current_value: {current_value_text}
+suggested_value: {suggested_value_text}
 prehint_score: {row.get('prehint_score')}
 posthint_score_est: {row.get('posthint_score_est')}
 score_delta: {row.get('score_delta')}
@@ -142,6 +192,7 @@ verification_status: {row.get('verification_status')}
 source_domain_internal: {row.get('source_domain_internal')}
 
 Write 2 to 4 sentences.
+If the current value is missing/unavailable, say that directly. Never write "the current value" as if it were real data.
 Do not display the raw source URL.
 """.strip()
 
@@ -243,12 +294,37 @@ def build_field_hint_rows(joined_rows):
     output_rows = []
     created_at = utc_now_iso()
 
-    for row in joined_rows:
+    for raw_row in joined_rows:
+        row = normalize_input_row(raw_row)
+
+        # Keep source-only website candidates instead of dropping them.
+        # These are usually LOW-confidence candidates, but the Confidence Agent
+        # still needs a row so it can explicitly classify them as hide/manual-review.
+        field_name = clean_text(row.get("field_name")).lower()
+        source_url = clean_text(row.get("source_url_internal") or row.get("source_url"))
+        source_domain = clean_text(row.get("source_domain_internal") or row.get("source_domain"))
+
+        if not row.get("suggested_value") and field_name == "website" and source_url:
+            row["suggested_value"] = source_url
+
         row["score_delta"] = score_delta(row.get("prehint_score"), row.get("posthint_score_est"))
 
-        # Skip rows with no clear score movement and no useful suggestion.
-        if not row.get("suggested_value") and not row.get("ml_reason"):
-            continue
+        has_useful_value = bool(clean_text(row.get("suggested_value")))
+        has_reason = bool(clean_text(row.get("ml_reason")))
+        has_source_evidence = bool(source_url or source_domain)
+
+        # Do not drop candidate rows at this stage.
+        # Even weak or source-only rows should be written so the Confidence Agent
+        # can classify them as LOW / hide_or_manual_review.
+        if not has_useful_value:
+            if source_url:
+                row["suggested_value"] = source_url
+            elif source_domain:
+                row["suggested_value"] = f"Candidate source from {source_domain}"
+            elif has_reason:
+                row["suggested_value"] = "Candidate value requires moderator review"
+            else:
+                row["suggested_value"] = "Candidate value unavailable"
 
         hint_text = generate_field_hint(row)
         suggested_action = build_suggested_action(row)

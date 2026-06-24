@@ -134,9 +134,10 @@ def run_pending_source_finder(
     write_bigquery: bool = True,
     gap_detector_run_id: str | None = None,
 ) -> Dict[str, Any]:
+    requested_gap_detector_run_id = gap_detector_run_id
     items = fetch_pending_queue_items(
         limit=limit,
-        gap_detector_run_id=gap_detector_run_id,
+        gap_detector_run_id=requested_gap_detector_run_id,
     )
 
     results = []
@@ -144,14 +145,14 @@ def run_pending_source_finder(
     for item in items:
         queue_id = item["queue_id"]
         sitecode = str(item["sitecode"])
-        gap_detector_run_id = str(item.get("gap_detector_run_id") or "")
+        item_gap_detector_run_id = str(item.get("gap_detector_run_id") or "")
 
         try:
             mark_processing(queue_id)
 
             result = run_source_finder(
                 profile_id=sitecode,
-                gap_detector_run_id=gap_detector_run_id,
+                gap_detector_run_id=item_gap_detector_run_id,
                 page_size=10,
                 max_candidate_urls=20,
                 export_csv=False,
@@ -179,7 +180,7 @@ def run_pending_source_finder(
 
     return {
         "checked_at": datetime.datetime.utcnow().isoformat(),
-        "gap_detector_run_id_filter": gap_detector_run_id,
+        "gap_detector_run_id_filter": requested_gap_detector_run_id,
         "items_found": len(items),
         "items_processed": len(results),
         "results": results,

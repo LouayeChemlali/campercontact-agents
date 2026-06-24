@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+google-cloud-bigquery
+python-dotenv
+rapidfuzz
+pydantic
