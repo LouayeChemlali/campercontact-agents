@@ -1,5 +1,0 @@
-fastapi
-uvicorn
-google-cloud-bigquery
-google-auth
-requests

@@ -1,5 +1,0 @@
-fastapi
-uvicorn[standard]
-google-cloud-bigquery
-rapidfuzz
-python-dotenv
