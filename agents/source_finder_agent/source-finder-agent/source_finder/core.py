@@ -23,53 +23,6 @@ def _now_iso() -> str:
 
 
 
-def _looks_like_date(value: str) -> bool:
-    value = str(value or "").strip()
-    return bool(re.fullmatch(r"\d{1,2}[./-]\d{1,2}[./-]\d{2,4}", value))
-
-
-def _clean_phone(value: str) -> str:
-    value = str(value or "").strip()
-
-    if not value:
-        return ""
-
-    # Avoid treating dates like 14.04.2026 or 27.10.2024 as phone numbers.
-    if _looks_like_date(value):
-        return ""
-
-    digits = re.sub(r"\D", "", value)
-
-    # Most real phone numbers should have at least 7 digits.
-    if len(digits) < 7:
-        return ""
-
-    return value
-
-
-def _clean_extracted_fields(extracted: Dict[str, Any]) -> Dict[str, Any]:
-    cleaned = dict(extracted)
-
-    # Decode URL-encoded text such as Agriturismo%20Angeli%20Sognanti.
-    for key in [
-        "source_name_found",
-        "source_address_found",
-        "source_city_found",
-        "source_country_found",
-        "source_facilities_text",
-        "source_opening_text",
-        "source_price_text",
-        "source_page_text_excerpt",
-    ]:
-        if cleaned.get(key):
-            cleaned[key] = unquote(str(cleaned[key])).strip()
-
-    cleaned["source_phone_found"] = _clean_phone(cleaned.get("source_phone_found", ""))
-
-    return cleaned
-
-
-
 def _clean_source_text(value: Any) -> str:
     value = str(value or "").strip()
     if not value or value.lower() in {"nan", "none"}:
@@ -246,18 +199,6 @@ def run_source_finder(
     csv_path = ""
     if export_csv:
         csv_path = export_rows_csv(rows, profile_id, run_id)
-
-    fallback_excerpt = " | ".join(
-        part for part in [
-            candidate.get("page_title", ""),
-            candidate.get("snippet", "")
-        ]
-        if part
-    )[:2000]
-
-    extraction_status = extracted.get("extraction_status", "")
-    if extraction_status == "fetch_failed" and fallback_excerpt:
-        extraction_status = "metadata_only_fetch_failed"
 
     return {
         "source_finder_run_id": run_id,

@@ -56,7 +56,7 @@ def match_profile(cc_profile: dict, source_rows: list[dict]) -> list[dict]:
         source_domain = _extract_domain(source_url)
         source_title = str(source_row.get("source_title") or "")
         source_snippet = str(source_row.get("source_snippet") or "")
-        source_finder_run_id = str(source_row.get("run_id") or "")
+        source_finder_run_id = str(source_row.get("source_finder_run_id") or source_row.get("run_id") or "")
 
         for field_cfg in ACTIVE_FIELDS:
             cc_val = _get_cc_value(field_cfg, cc_profile)
