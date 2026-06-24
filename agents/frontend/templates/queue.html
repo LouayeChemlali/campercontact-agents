@@ -1,0 +1,420 @@
+{% extends "base.html" %}
+
+{% block title %}Moderation Queue{% endblock %}
+
+{% block content %}
+
+{# ------------------------------------------------------------------ #}
+{# Page header + Show-N control                                        #}
+{# ------------------------------------------------------------------ #}
+<div class="mb-5 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+  <div>
+    <h1 class="text-2xl font-bold text-gray-900 tracking-tight">Moderation Queue</h1>
+    <p class="mt-1 text-sm text-gray-500">
+      Profiles ranked by ML priority score. One issue per profile.
+    </p>
+  </div>
+  <div class="flex items-center gap-1.5 shrink-0" role="group" aria-label="Rows to show">
+    <span class="text-xs text-gray-400 mr-0.5">Show</span>
+    {% for n in limit_choices %}
+      <a href="{{ url_for('queue', limit=n, page=1) }}"
+         class="px-2.5 py-1 rounded text-xs font-semibold transition-colors
+                {% if current_limit == n %}bg-cc-green text-white{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}"
+         aria-current="{{ 'true' if current_limit == n else 'false' }}">{{ n }}</a>
+    {% endfor %}
+  </div>
+</div>
+
+{# ------------------------------------------------------------------ #}
+{# Collapsible overview                                                #}
+{# ------------------------------------------------------------------ #}
+<details class="mb-5 group bg-white border border-gray-200 rounded-card shadow-card overflow-hidden">
+  <summary class="px-5 py-3.5 flex items-center justify-between cursor-pointer select-none
+                   list-none [&::-webkit-details-marker]:hidden hover:bg-gray-50 transition-colors">
+    <div class="flex items-center gap-3 min-w-0">
+      <svg class="w-4 h-4 text-cc-green shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+      </svg>
+      <span class="text-sm font-semibold text-gray-700 shrink-0">Queue overview</span>
+      <span class="hidden sm:block text-sm text-gray-400 truncate">
+        {{ stats.total_profiles | thousands }} profiles
+        &nbsp;&middot;&nbsp;{{ stats.high_count | thousands }} high priority
+        &nbsp;&middot;&nbsp;{{ stats.country_count }} {{ 'country' if stats.country_count == 1 else 'countries' }}
+      </span>
+    </div>
+    <svg class="w-4 h-4 text-gray-400 group-open:rotate-180 transition-transform duration-200 shrink-0 ml-3"
+         fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+    </svg>
+  </summary>
+  <div class="border-t border-gray-100 px-5 py-5 grid grid-cols-2 md:grid-cols-4 gap-6">
+    <div>
+      <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Priority</p>
+      <div class="space-y-2.5">
+        {% for label, dot, count in [('High','bg-red-500',stats.high_count),('Medium','bg-amber-400',stats.medium_count),('Low','bg-gray-300',stats.low_count)] %}
+        <div class="flex items-center justify-between gap-3">
+          <span class="flex items-center gap-2 text-sm text-gray-600 shrink-0">
+            <span class="w-2 h-2 rounded-full {{ dot }}"></span>{{ label }}
+          </span>
+          <span class="text-sm font-semibold text-gray-800 tabular-nums">{{ count | thousands }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    <div>
+      <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Anomaly</p>
+      <div class="space-y-2.5">
+        {% for label, dot, count in [('High','bg-orange-500',stats.anomaly_high),('Medium','bg-amber-300',stats.anomaly_medium),('Normal','bg-gray-200',stats.anomaly_normal)] %}
+        <div class="flex items-center justify-between gap-3">
+          <span class="flex items-center gap-2 text-sm text-gray-600 shrink-0">
+            <span class="w-2 h-2 rounded-full {{ dot }}"></span>{{ label }}
+          </span>
+          <span class="text-sm font-semibold text-gray-800 tabular-nums">{{ count | thousands }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="col-span-2">
+      <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Top issue fields</p>
+      {% if stats.top_fields %}
+        <div class="grid grid-cols-2 gap-x-8 gap-y-2.5">
+          {% for f in stats.top_fields %}
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-sm text-gray-600 capitalize">{{ f.field_name }}</span>
+            <span class="text-sm font-semibold text-gray-800 tabular-nums">{{ f.profile_count | thousands }}</span>
+          </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+      {% if stats.country_count %}
+        <p class="text-xs text-gray-400 mt-4 pt-4 border-t border-gray-100">
+          Spanning {{ stats.country_count }} {{ 'country' if stats.country_count == 1 else 'countries' }}
+        </p>
+      {% endif %}
+    </div>
+  </div>
+</details>
+
+{# ------------------------------------------------------------------ #}
+{# Empty state                                                         #}
+{# ------------------------------------------------------------------ #}
+{% if not profiles %}
+  <div class="bg-white border border-gray-200 rounded-card shadow-card px-8 py-16 text-center">
+    <svg class="w-10 h-10 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+    </svg>
+    <p class="text-gray-500 font-medium">Queue is empty</p>
+  </div>
+
+{% else %}
+
+{# ------------------------------------------------------------------ #}
+{# Batch run bar                                                       #}
+{# ------------------------------------------------------------------ #}
+{% if gd_url_set %}
+<div id="batch-bar"
+     class="hidden mb-3 flex items-center justify-between gap-4
+            bg-cc-green-lt border border-green-200 rounded-xl px-5 py-3"
+     role="status" aria-live="polite">
+  <span class="text-sm font-medium text-green-800">
+    <span id="selected-count">0</span> profile<span id="selected-plural">s</span> selected
+  </span>
+  <div class="flex items-center gap-3">
+    <button type="button" id="deselect-btn"
+            class="text-xs text-green-700 hover:text-green-900 underline transition-colors">
+      Deselect all
+    </button>
+    <button type="button" id="run-selected-btn"
+            class="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-semibold
+                   bg-cc-green text-white hover:bg-cc-green-dk active:scale-95
+                   transition-all focus:outline-none focus:ring-2 focus:ring-cc-green focus:ring-offset-1">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+              d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+              d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+      Run selected
+    </button>
+  </div>
+</div>
+<form id="batch-form" action="{{ url_for('run_pipeline') }}" method="POST" class="hidden">
+  <input type="hidden" name="profile_ids" id="batch-ids" />
+</form>
+{% endif %}
+
+{# ------------------------------------------------------------------ #}
+{# Queue table                                                         #}
+{# ------------------------------------------------------------------ #}
+<div class="bg-white border border-gray-200 rounded-card shadow-card overflow-hidden">
+  <table class="w-full text-sm" role="grid" aria-label="Moderation priority queue">
+    <thead>
+      <tr class="border-b border-gray-100 bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+        {% if gd_url_set %}
+        <th class="pl-4 pr-2 py-3 w-8">
+          <input type="checkbox" id="select-all-cb"
+                 class="w-3.5 h-3.5 rounded border-gray-300 text-cc-green cursor-pointer"
+                 title="Select all on this page" aria-label="Select all profiles" />
+        </th>
+        {% endif %}
+        <th class="px-4 py-3 text-left w-10">#</th>
+        <th class="px-4 py-3 text-left">Profile</th>
+        <th class="px-4 py-3 text-left">Issue</th>
+        <th class="px-4 py-3 text-left">Priority</th>
+        <th class="px-4 py-3 text-left">Score uplift</th>
+        <th class="px-4 py-3 text-left">Anomaly</th>
+        <th class="px-4 py-3 text-left">Effort</th>
+        <th class="px-4 py-3 text-right"></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-50">
+      {% for p in profiles %}
+
+        {% if p.integrated_priority_label == 'high_priority' %}
+          {% set prio_cls = 'bg-red-100 text-red-800' %}
+          {% set prio_dot = 'bg-red-500' %}
+          {% set prio_label = 'High' %}
+        {% elif p.integrated_priority_label == 'medium_priority' %}
+          {% set prio_cls = 'bg-amber-100 text-amber-800' %}
+          {% set prio_dot = 'bg-amber-400' %}
+          {% set prio_label = 'Medium' %}
+        {% else %}
+          {% set prio_cls = 'bg-gray-100 text-gray-600' %}
+          {% set prio_dot = 'bg-gray-300' %}
+          {% set prio_label = 'Low' %}
+        {% endif %}
+
+        {% if p.anomaly_review_tier == 'HIGH' %}
+          {% set anom_cls = 'bg-orange-100 text-orange-800' %}
+          {% set anom_label = 'High' %}
+        {% elif p.anomaly_review_tier in ('MEDIUM_KMEANS', 'MEDIUM_AUTOENCODER') %}
+          {% set anom_cls = 'bg-amber-100 text-amber-700' %}
+          {% set anom_label = 'Medium' %}
+        {% else %}
+          {% set anom_cls = 'bg-gray-100 text-gray-500' %}
+          {% set anom_label = 'Normal' %}
+        {% endif %}
+
+        {% if p.field_name == 'photo' %}
+          {% set field_cls = 'bg-blue-100 text-blue-800' %}
+        {% elif p.field_name == 'contact' %}
+          {% set field_cls = 'bg-purple-100 text-purple-800' %}
+        {% elif p.field_name in ('description', 'name') %}
+          {% set field_cls = 'bg-teal-100 text-teal-800' %}
+        {% else %}
+          {% set field_cls = 'bg-gray-100 text-gray-700' %}
+        {% endif %}
+
+        {% if p.estimated_moderator_effort == 'low' %}
+          {% set effort_cls = 'bg-green-50 text-green-700' %}
+          {% set effort_label = 'Low' %}
+        {% else %}
+          {% set effort_cls = 'bg-rose-100 text-rose-700' %}
+          {% set effort_label = 'High' %}
+        {% endif %}
+
+        <tr class="hover:bg-gray-50 transition-colors">
+
+          {% if gd_url_set %}
+          <td class="pl-4 pr-2 py-3">
+            <input type="checkbox"
+                   class="profile-cb w-3.5 h-3.5 rounded border-gray-300 text-cc-green cursor-pointer"
+                   value="{{ p.sitecode }}"
+                   aria-label="Select {{ p.profile_name or p.sitecode }}" />
+          </td>
+          {% endif %}
+
+          <td class="px-4 py-3 text-gray-400 font-mono text-xs tabular-nums">
+            {{ p.integrated_queue_rank or loop.index }}
+          </td>
+
+          <td class="px-4 py-3">
+            <div class="font-medium text-gray-800 leading-tight">
+              <a href="{{ url_for('view_profile', profile_id=p.sitecode) }}"
+                 class="hover:text-cc-green transition-colors">
+                {{ p.profile_name or ('Profile ' + p.sitecode) }}
+              </a>
+            </div>
+            <div class="text-xs text-gray-400 mt-0.5 flex items-center gap-2">
+              <span class="font-mono">{{ p.sitecode }}</span>
+              {% if p.country %}
+                <span class="text-gray-300">|</span>
+                <span>{{ p.country }}</span>
+              {% endif %}
+            </div>
+          </td>
+
+          <td class="px-4 py-3">
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {{ field_cls }}">
+              {{ p.field_name or 'unknown' }}
+            </span>
+            {% if p.issue_type %}
+              <div class="text-xs text-gray-400 mt-1">{{ p.issue_type | replace('_', ' ') }}</div>
+            {% endif %}
+          </td>
+
+          <td class="px-4 py-3">
+            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold {{ prio_cls }}">
+              <span class="w-1.5 h-1.5 rounded-full {{ prio_dot }}" aria-hidden="true"></span>
+              {{ prio_label }}
+            </span>
+            {% if p.integrated_priority_score is not none %}
+              <div class="text-xs text-gray-400 mt-1 tabular-nums">score {{ p.integrated_priority_score | round(1) }}</div>
+            {% endif %}
+          </td>
+
+          <td class="px-4 py-3 tabular-nums">
+            {% if p.expected_score_uplift is not none %}
+              <span class="font-semibold text-cc-green">+{{ p.expected_score_uplift | round(1) }}</span>
+              <span class="text-xs text-gray-400"> pts</span>
+              {% if p.prehint_score is not none %}
+                <div class="text-xs text-gray-400 mt-0.5">from {{ p.prehint_score | round(1) }}</div>
+              {% endif %}
+            {% else %}
+              <span class="text-gray-300 text-xs">n/a</span>
+            {% endif %}
+          </td>
+
+          <td class="px-4 py-3">
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {{ anom_cls }}">
+              {{ anom_label }}
+            </span>
+          </td>
+
+          <td class="px-4 py-3">
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {{ effort_cls }}">
+              {{ effort_label }}
+            </span>
+          </td>
+
+          <td class="px-4 py-3 text-right">
+            {% if gd_url_set %}
+              <form action="{{ url_for('run_pipeline') }}" method="POST" class="inline">
+                <input type="hidden" name="profile_ids" value="{{ p.sitecode }}" />
+                <button type="submit"
+                        class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold
+                               bg-cc-green text-white hover:bg-cc-green-dk active:scale-95
+                               transition-all focus:outline-none focus:ring-2 focus:ring-cc-green focus:ring-offset-1"
+                        aria-label="Run pipeline for {{ p.profile_name or p.sitecode }}">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                          d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                          d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                  </svg>
+                  Run
+                </button>
+              </form>
+            {% endif %}
+          </td>
+        </tr>
+
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{# ------------------------------------------------------------------ #}
+{# Pagination                                                          #}
+{# ------------------------------------------------------------------ #}
+<div class="mt-4 flex items-center justify-between">
+  <p class="text-xs text-gray-400">
+    Page {{ current_page }} of {{ total_pages | thousands }}
+    &nbsp;&middot;&nbsp;
+    Showing {{ profiles | length }} of {{ stats.total_profiles | thousands }} profiles
+  </p>
+  <div class="flex items-center gap-2">
+    {% if current_page > 1 %}
+      <a href="{{ url_for('queue', limit=current_limit, page=current_page - 1) }}"
+         class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold
+                bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+        </svg>
+        Previous
+      </a>
+    {% endif %}
+    {% if current_page < total_pages %}
+      <a href="{{ url_for('queue', limit=current_limit, page=current_page + 1) }}"
+         class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold
+                bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors">
+        Next
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+        </svg>
+      </a>
+    {% endif %}
+  </div>
+</div>
+
+{% endif %}
+{% endblock %}
+
+
+{% block scripts %}
+<script>
+(function () {
+  'use strict';
+
+  var batchBar    = document.getElementById('batch-bar');
+  var countEl     = document.getElementById('selected-count');
+  var pluralEl    = document.getElementById('selected-plural');
+  var batchIds    = document.getElementById('batch-ids');
+  var batchForm   = document.getElementById('batch-form');
+  var runBtn      = document.getElementById('run-selected-btn');
+  var deselectBtn = document.getElementById('deselect-btn');
+  var selectAllCb = document.getElementById('select-all-cb');
+
+  if (!batchBar) return;
+
+  function getChecked() {
+    return Array.from(document.querySelectorAll('.profile-cb:checked'));
+  }
+
+  function updateBar() {
+    var n = getChecked().length;
+    var all = document.querySelectorAll('.profile-cb');
+    countEl.textContent  = n;
+    pluralEl.textContent = n === 1 ? '' : 's';
+    batchBar.classList.toggle('hidden', n === 0);
+    if (selectAllCb) {
+      selectAllCb.indeterminate = n > 0 && n < all.length;
+      selectAllCb.checked = n > 0 && n === all.length;
+    }
+  }
+
+  document.querySelectorAll('.profile-cb').forEach(function (cb) {
+    cb.addEventListener('change', updateBar);
+  });
+
+  if (selectAllCb) {
+    selectAllCb.addEventListener('change', function () {
+      document.querySelectorAll('.profile-cb').forEach(function (cb) {
+        cb.checked = selectAllCb.checked;
+      });
+      updateBar();
+    });
+  }
+
+  if (deselectBtn) {
+    deselectBtn.addEventListener('click', function () {
+      document.querySelectorAll('.profile-cb').forEach(function (cb) { cb.checked = false; });
+      if (selectAllCb) selectAllCb.checked = false;
+      updateBar();
+    });
+  }
+
+  if (runBtn) {
+    runBtn.addEventListener('click', function () {
+      var ids = getChecked().map(function (cb) { return cb.value; });
+      if (!ids.length) return;
+      batchIds.value = ids.join(',');
+      batchForm.submit();
+    });
+  }
+
+}());
+</script>
+{% endblock %}

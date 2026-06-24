@@ -26,11 +26,22 @@ def load_cc_profiles(
 def load_sources_for_profiles(
     client: bigquery.Client,
     sitecodes: list[str],
+    gap_detector_run_id: str | None = None,
 ) -> list[dict]:
     # Load all success rows — filtering by sitecodes via a large IN clause breaks
     # for full runs (68k+ values). Python join in combine_profiles_with_sources handles matching.
+    # When gap_detector_run_id is provided, scope to that run only to avoid matching stale data.
     dataset, tbl = SOURCE_TABLE.split(".", 1)
     table = f"`{BIGQUERY_PROJECT}.{dataset}.{tbl}`"
+    if gap_detector_run_id:
+        try:
+            params = [bigquery.ScalarQueryParameter("run_id", "STRING", gap_detector_run_id)]
+            query = f"SELECT * FROM {table} WHERE extraction_status = 'success' AND gap_detector_run_id = @run_id"
+            rows = list(client.query(query, job_config=bigquery.QueryJobConfig(query_parameters=params)).result())
+            return _dedup_sources([dict(row) for row in rows])
+        except Exception:
+            # Column may not exist in older table schema — fall through to load all sources.
+            pass
     query = f"SELECT * FROM {table} WHERE extraction_status = 'success'"
     rows = list(client.query(query).result())
     return _dedup_sources([dict(row) for row in rows])
