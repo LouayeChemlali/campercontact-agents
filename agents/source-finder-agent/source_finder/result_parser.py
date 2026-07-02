@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 
 
 def parse_vertex_results(search_response: Dict[str, Any], query: str) -> List[Dict[str, Any]]:
+    """Turn a raw Vertex AI Search response into a flat list of candidate rows."""
     rows: List[Dict[str, Any]] = []
     results = search_response.get("results", []) or []
 
@@ -41,6 +42,7 @@ def parse_vertex_results(search_response: Dict[str, Any], query: str) -> List[Di
 
 
 def deduplicate_candidates(candidates: List[Dict[str, Any]], max_urls: int) -> List[Dict[str, Any]]:
+    """Remove duplicate URLs and cap the list at max_urls."""
     seen = set()
     unique = []
     for candidate in candidates:

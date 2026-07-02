@@ -10,6 +10,7 @@ from .config import OUTPUT_DATASET, OUTPUT_TABLE, PROJECT_ID
 
 
 def insert_rows_bigquery(rows: List[Dict[str, Any]]) -> str:
+    """Insert source finder result rows into BigQuery and return the table ID."""
     table_id = f"{PROJECT_ID}.{OUTPUT_DATASET}.{OUTPUT_TABLE}"
 
     if not rows:

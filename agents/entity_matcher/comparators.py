@@ -1,7 +1,7 @@
 import re
 from rapidfuzz import fuzz
 
-# comparison functions used by the entity matcher — each returns (status, score)
+# comparison functions used by the entity matcher, each returns (status, score)
 
 # verification status constants
 MATCH = "MATCH"
@@ -50,6 +50,7 @@ def _apply_normalize(val: str, normalize: str | None) -> str:
 
 
 def compare_string_exact(cc_val, src_val, normalize: str | None = None) -> tuple[str, float]:
+    """Exact string comparison after optional normalisation (email, URL, or plain lowercase)."""
     check = _empty_check(cc_val, src_val)
     if check is not None:
         return check
@@ -62,6 +63,7 @@ def compare_string_exact(cc_val, src_val, normalize: str | None = None) -> tuple
 
 # fuzzy threshold defaults to 0.85 for name/city/country, lower for address (0.75)
 def compare_string_fuzzy(cc_val, src_val, threshold: float = 0.85) -> tuple[str, float]:
+    """Fuzzy string comparison using token ratio, returns MATCH when similarity meets the threshold."""
     check = _empty_check(cc_val, src_val)
     if check is not None:
         return check
@@ -117,6 +119,7 @@ def compare_numeric_directional(cc_val, src_val) -> tuple[str, float]:
 
 
 def compare_boolean(cc_val, src_val) -> tuple[str, float]:
+    """Boolean comparison, treating 'true', '1', and 'yes' as equivalent."""
     check = _empty_check(cc_val, src_val)
     if check is not None:
         return check

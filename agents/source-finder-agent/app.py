@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-# Flask endpoints for the source finder — run one profile or drain the pending queue
+# Flask endpoints for the source finder, run one profile or drain the pending queue
 
 import os
 from flask import Flask, jsonify, request

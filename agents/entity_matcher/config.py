@@ -1,4 +1,4 @@
-# env-based config for the entity matcher — table names and field comparison settings
+# env-based config for the entity matcher, table names and field comparison settings
 
 import os
 from dotenv import load_dotenv
@@ -65,7 +65,7 @@ FIELDS_CONFIG = [
     },
     {
         "field": "address",
-        # Special composite CC field — assembled in matcher.py from parts
+        # Special composite CC field, assembled in matcher.py from parts
         "cc_field": "__composite_address__",
         "cc_parts": ["address_street", "address_house_number", "address_zip_code"],
         "source_field": "source_address_found",
@@ -73,7 +73,7 @@ FIELDS_CONFIG = [
         "threshold": 0.75,
         "enabled": True,
     },
-    # TODO not included in v1 — empty data in source or requires extraction
+    # TODO not included in v1, empty data in source or requires extraction
     # {"field": "phone", "cc_field": "contact_details_phone_number", "source_field": "source_phone_found",
     #  "compare_type": "string_exact", "normalize": "phone", "enabled": False},
     # {"field": "latitude", "cc_field": "latitude", "source_field": "source_latitude_found",

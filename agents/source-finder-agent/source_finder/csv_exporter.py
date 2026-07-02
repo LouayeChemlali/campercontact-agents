@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-# optional CSV export for local debugging — not used in the Cloud Run pipeline
+# optional CSV export for local debugging, not used in the Cloud Run pipeline
 
 import csv
 import os

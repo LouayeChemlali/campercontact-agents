@@ -238,9 +238,7 @@ def _max_created_at(hints: list[dict]):
         return values[0]
 
 
-# ---------------------------------------------------------------------------
 # Priority queue: /queue
-# ---------------------------------------------------------------------------
 
 def get_queue_stats(client: bigquery.Client) -> dict:
     """Return aggregate statistics about the full priority queue."""
@@ -346,9 +344,7 @@ def get_priority_queue(
         return []
 
 
-# ---------------------------------------------------------------------------
 # Profile lookup: /profile/<profile_id>
-# ---------------------------------------------------------------------------
 
 def get_hints_for_profile(client: bigquery.Client, profile_id: str) -> list[dict]:
     """Return the most recent Confidence Agent hints for a profile."""

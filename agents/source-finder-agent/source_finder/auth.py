@@ -5,6 +5,7 @@ import google.auth.transport.requests
 
 
 def get_access_token() -> str:
+    """Get a short-lived Google Cloud access token using the default service account."""
     credentials, _ = google.auth.default(
         scopes=["https://www.googleapis.com/auth/cloud-platform"]
     )

@@ -99,7 +99,8 @@ def run_entity_matcher(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Entity Matcher — compares CC profiles against external sources")
+    """CLI entry point for running the entity matcher against BigQuery data."""
+    parser = argparse.ArgumentParser(description="Entity Matcher: compares CC profiles against external sources")
     parser.add_argument("--limit", type=int, default=None, help="Max number of profiles to process after source loading")
     parser.add_argument("--write", action="store_true", default=False, help="Write results to BigQuery (default: dry-run)")
     parser.add_argument("--append", action="store_true", default=False, help="Append instead of replacing the output table (default: truncate on write)")

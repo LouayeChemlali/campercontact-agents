@@ -21,6 +21,7 @@ def parse_args():
 
 
 def main():
+    """Run source finder for a single profile and print the result as JSON."""
     args = parse_args()
     result = run_source_finder(
         profile_id=args.profile_id,

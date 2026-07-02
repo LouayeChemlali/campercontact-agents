@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-# checks robots.txt before fetching any source page — results are cached per domain to avoid repeat requests
+# checks robots.txt before fetching any source page, results are cached per domain to avoid repeat requests
 
 from functools import lru_cache
 from urllib.parse import urlparse
@@ -29,6 +29,7 @@ def _load_robot_parser(base_url: str) -> RobotFileParser:
 
 
 def can_fetch(url: str) -> bool:
+    """Return True if the source finder is allowed to fetch this URL per robots.txt."""
     if not RESPECT_ROBOTS_TXT:
         return True
     parsed = urlparse(url)

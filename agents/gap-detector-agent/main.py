@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-# central orchestrator — queues profiles in BigQuery then fires each agent in sequence
+# central orchestrator, queues profiles in BigQuery then fires each agent in sequence
 
 import os
 from datetime import datetime
@@ -233,6 +233,7 @@ def _trigger_pending_source_finder(*, limit: int, write_bigquery: bool = True, g
 
 @app.post("/run-gap-detector")
 def run_gap_detector(payload: Optional[Dict[str, Any]] = None):
+    """Queue profiles for the pipeline and trigger each downstream agent in order."""
     payload = payload or {}
 
     run_id = f"gap-detector-run-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
@@ -304,7 +305,7 @@ def run_gap_detector(payload: Optional[Dict[str, Any]] = None):
     result = list(client.query(count_query, job_config=count_job_config).result())
     queued_rows = int(result[0]["queued_rows"])
 
-    # each stage only runs if its flag is set — defaults come from env vars
+    # each stage only runs if its flag is set, defaults come from env vars
     should_trigger_source_finder = bool(payload.get("trigger_source_finder", AUTO_TRIGGER_SOURCE_FINDER))
     should_trigger_entity_matcher = bool(payload.get("trigger_entity_matcher", AUTO_TRIGGER_ENTITY_MATCHER))
     should_trigger_hint_generator = bool(payload.get("trigger_hint_generator", AUTO_TRIGGER_HINT_GENERATOR))

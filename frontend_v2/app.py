@@ -251,9 +251,7 @@ def view_profile(profile_id):
     )
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 def _parse_ids(raw: str) -> list[str]:
     """Split comma/newline input, keep only non-empty numeric strings, deduplicated."""

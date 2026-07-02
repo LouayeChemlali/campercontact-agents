@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-# SQL-based hint prioritization — deduplicates entity matcher output and ranks candidates by priority score
+# SQL-based hint prioritization, deduplicates entity matcher output and ranks candidates by priority score
 
 import datetime
 import os
@@ -59,6 +59,7 @@ def _table_exists(client: bigquery.Client, table_name: str) -> bool:
 
 
 def ensure_prioritized_table(client: bigquery.Client) -> None:
+    """Create the prioritized hint candidates table if it does not already exist."""
     query = f"""
     CREATE SCHEMA IF NOT EXISTS `{PROJECT_ID}.hint_prioritization`;
 
@@ -331,6 +332,7 @@ def fetch_prioritized_inputs(
     profile_id: Optional[str] = None,
     limit: Optional[int] = None,
 ) -> list[dict[str, Any]]:
+    """Load prioritized hint candidates from BigQuery for hint generation."""
     where_parts = ["1=1"]
     params: list[Any] = []
 
@@ -393,6 +395,7 @@ def fetch_prioritized_inputs(
 
 
 def build_field_hint_rows_from_prioritized(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Build hint rows from prioritized candidates, filling in missing values before generating text."""
     output_rows = []
     created_at = _now_iso()
 
@@ -505,6 +508,7 @@ def run_hint_generator(
     refresh_prioritization: bool = True,
     write_bigquery: bool = True,
 ) -> dict[str, Any]:
+    """Run the full hint generation pipeline and write results to BigQuery."""
     client = bigquery.Client(project=PROJECT_ID)
 
     prioritization_result = {"skipped": True}

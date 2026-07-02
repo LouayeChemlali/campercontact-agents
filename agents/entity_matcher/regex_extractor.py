@@ -1,4 +1,4 @@
-# regex helpers for pulling emails and phone numbers out of raw text — not actively used in v1 but kept for future extraction
+# regex helpers for pulling emails and phone numbers out of raw text, not actively used in v1 but kept for future extraction
 
 import re
 

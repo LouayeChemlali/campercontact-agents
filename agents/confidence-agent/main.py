@@ -252,6 +252,7 @@ def score_confidence(row: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def ensure_output_table() -> None:
+    """Create the confidence output table in BigQuery if it does not exist yet."""
     schema = [
         bigquery.SchemaField("confidence_id", "STRING"),
         bigquery.SchemaField("gap_detector_run_id", "STRING"),
@@ -287,6 +288,7 @@ def ensure_output_table() -> None:
 
 
 def fetch_hint_rows(payload: RunConfidenceRequest) -> List[Dict[str, Any]]:
+    """Load hint rows from BigQuery filtered by run ID and profile IDs."""
     where_parts = ["1=1"]
     query_params: List[bigquery.QueryParameter] = []
 
@@ -342,6 +344,7 @@ def fetch_hint_rows(payload: RunConfidenceRequest) -> List[Dict[str, Any]]:
 
 
 def delete_existing_rows(payload: RunConfidenceRequest) -> None:
+    """Delete existing confidence rows for a run before reinserting updated ones."""
     where_parts = []
     query_params: List[bigquery.QueryParameter] = []
 
@@ -374,6 +377,7 @@ def delete_existing_rows(payload: RunConfidenceRequest) -> None:
 
 
 def build_output_rows(hint_rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Score each hint row and build the full confidence output records."""
     created_at = utc_now_iso()
     output_rows = []
 
@@ -414,6 +418,7 @@ def build_output_rows(hint_rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def insert_output_rows(rows: List[Dict[str, Any]]) -> None:
+    """Insert scored confidence rows into the output BigQuery table."""
     if not rows:
         return
 
@@ -436,6 +441,7 @@ def health() -> Dict[str, Any]:
 
 @app.post("/run-confidence-agent")
 def run_confidence_agent(payload: RunConfidenceRequest) -> Dict[str, Any]:
+    """Score hint rows and write confidence results back to BigQuery."""
     ensure_output_table()
 
     hint_rows = fetch_hint_rows(payload)

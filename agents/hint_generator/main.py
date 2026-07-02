@@ -65,7 +65,7 @@ def clean_text(value):
     return str(value).strip()
 
 
-# values that look like template artifacts — don't pass these to gemini as real data
+# values that look like template artifacts, don't pass these to gemini as real data
 _PLACEHOLDER_VALUES = {
     "the current value",
     "current value",
@@ -109,6 +109,7 @@ def normalize_input_row(row):
 
 
 def build_gemini_client():
+    """Build and return a Vertex AI Gemini client."""
     if genai is None:
         raise RuntimeError("google-genai is not installed. Run: pip install -r requirements.txt")
 
@@ -121,6 +122,7 @@ def build_gemini_client():
 
 # low temperature keeps the output factual and consistent across runs
 def call_gemini(prompt, max_output_tokens=220):
+    """Call the Gemini model with the given prompt and return the text response."""
     client = build_gemini_client()
 
     response = client.models.generate_content(
@@ -202,6 +204,7 @@ Do not display the raw source URL.
 
 
 def generate_field_hint(row):
+    """Generate a field-level hint using Gemini, falling back to a template if unavailable."""
     if not USE_GEMINI:
         return fallback_field_hint(row)
 
@@ -295,6 +298,7 @@ def fetch_joined_inputs(client, profile_id=None, limit=None):
 
 
 def build_field_hint_rows(joined_rows):
+    """Generate field-level hints for all input rows and return them as a list."""
     output_rows = []
     created_at = utc_now_iso()
 
@@ -420,6 +424,7 @@ Do not overclaim.
 
 
 def generate_profile_summary(profile_id, profile_name, field_hint_rows):
+    """Generate a profile-level summary using Gemini, falling back to a template if unavailable."""
     if not USE_GEMINI:
         return fallback_profile_summary(profile_name, field_hint_rows)
 
@@ -433,6 +438,7 @@ def generate_profile_summary(profile_id, profile_name, field_hint_rows):
 
 
 def build_profile_summary_rows(field_hint_rows):
+    """Generate one profile-level summary per profile from the field hints."""
     grouped = defaultdict(list)
     for row in field_hint_rows:
         grouped[row.get("profile_id")].append(row)
@@ -470,6 +476,7 @@ def build_profile_summary_rows(field_hint_rows):
 
 
 def insert_rows(client, table_name, rows):
+    """Insert rows into a BigQuery table by table name."""
     if not rows:
         print(f"No rows to insert into {table_name}.")
         return
@@ -502,6 +509,7 @@ def print_preview(field_hint_rows, summary_rows):
 
 
 def main():
+    """CLI entry point for generating hints from BigQuery inputs."""
     parser = argparse.ArgumentParser(description="Campercontact Hint Generator prototype")
     parser.add_argument("--profile_id", help="Optional: run for one profile_id only")
     parser.add_argument("--limit", type=int, help="Optional: limit number of joined input rows")

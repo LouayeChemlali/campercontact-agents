@@ -1,4 +1,4 @@
-# handles all BigQuery reads and writes for the entity matcher — profiles, sources, gap rows, and results
+# handles all BigQuery reads and writes for the entity matcher, profiles, sources, gap rows, and results
 
 import json
 from collections import Counter
@@ -29,6 +29,7 @@ def load_cc_profiles(
     sitecodes: list[str] | None = None,
     limit: int | None = None,
 ) -> list[dict]:
+    """Load CC profiles from BigQuery, optionally filtered to a list of sitecodes."""
     table = _fully_qualified_table(CC_TABLE)
     query_parameters: list[bigquery.ScalarQueryParameter | bigquery.ArrayQueryParameter] = []
 
@@ -177,6 +178,7 @@ def write_output(
     dry_run: bool = True,
     truncate: bool = False,
 ) -> dict[str, Any]:
+    """Write entity matcher results to BigQuery, filtering out NO_DATA rows first."""
     # Filter out NO_DATA rows before writing.
     filtered = [r for r in results if r["verification_status"] != NO_DATA]
 

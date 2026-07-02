@@ -20,6 +20,7 @@ def fetch_pending_queue_items(
     limit: int = 5,
     gap_detector_run_id: str | None = None,
 ) -> List[Dict[str, Any]]:
+    """Pull pending profiles from the source finder queue, ordered by priority."""
     client = bigquery.Client(project=PROJECT_ID)
     table_id = _queue_table_id()
 
@@ -64,6 +65,7 @@ def fetch_pending_queue_items(
 
 
 def mark_processing(queue_id: str) -> None:
+    """Set a queue item to 'processing' and increment its attempt counter."""
     client = bigquery.Client(project=PROJECT_ID)
     table_id = _queue_table_id()
 
@@ -86,6 +88,7 @@ def mark_processing(queue_id: str) -> None:
 
 
 def mark_completed(queue_id: str) -> None:
+    """Mark a queue item as completed after a successful run."""
     client = bigquery.Client(project=PROJECT_ID)
     table_id = _queue_table_id()
 
@@ -109,6 +112,7 @@ def mark_completed(queue_id: str) -> None:
 
 
 def mark_failed(queue_id: str, error: str) -> None:
+    """Mark a queue item as failed and store the error message."""
     client = bigquery.Client(project=PROJECT_ID)
     table_id = _queue_table_id()
 
