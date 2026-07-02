@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# reads a single Campercontact profile from BigQuery, normalising field names across Dutch and English column variants
+
 from typing import Any, Dict
 
 from google.cloud import bigquery

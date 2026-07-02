@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# CLI entry point for running the source finder manually against a single profile
+
 import argparse
 import json
 

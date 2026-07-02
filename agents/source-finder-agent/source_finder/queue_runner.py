@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# pulls pending profiles from the source_finder_queue table and runs the source finder on each one
+
 import datetime
 from typing import Any, Dict, List
 

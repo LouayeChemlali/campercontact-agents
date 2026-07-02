@@ -1,3 +1,5 @@
+# fetches a Google Cloud access token for authenticating Vertex AI Search requests
+
 import google.auth
 import google.auth.transport.requests
 

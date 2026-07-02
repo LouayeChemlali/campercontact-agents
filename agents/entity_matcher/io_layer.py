@@ -1,3 +1,5 @@
+# handles all BigQuery reads and writes for the entity matcher — profiles, sources, gap rows, and results
+
 import json
 from collections import Counter
 from typing import Any

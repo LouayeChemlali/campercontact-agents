@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# writes source finder results to BigQuery
+
 from typing import Any, Dict, List
 
 from google.cloud import bigquery

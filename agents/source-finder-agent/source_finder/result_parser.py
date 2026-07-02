@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# parses raw Vertex AI Search responses into flat candidate rows and removes duplicate URLs
+
 from typing import Any, Dict, List
 from urllib.parse import urlparse
 

@@ -1,3 +1,5 @@
+# regex helpers for pulling emails and phone numbers out of raw text — not actively used in v1 but kept for future extraction
+
 import re
 
 _EMAIL_PATTERN = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")

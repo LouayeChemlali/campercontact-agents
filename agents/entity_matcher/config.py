@@ -1,3 +1,5 @@
+# env-based config for the entity matcher — table names and field comparison settings
+
 import os
 from dotenv import load_dotenv
 

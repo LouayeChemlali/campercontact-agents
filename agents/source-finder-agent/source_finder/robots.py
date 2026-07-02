@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# checks robots.txt before fetching any source page — results are cached per domain to avoid repeat requests
+
 from functools import lru_cache
 from urllib.parse import urlparse
 from urllib.robotparser import RobotFileParser

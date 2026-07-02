@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# checks whether a URL belongs to one of the trusted camping source domains
+
 from urllib.parse import urlparse
 
 from .config import ALLOWED_SOURCE_DOMAINS
