@@ -24,7 +24,6 @@ def _now_iso() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat()
 
 
-
 def _looks_like_date(value: str) -> bool:
     value = str(value or "").strip()
     return bool(re.fullmatch(r"\d{1,2}[./-]\d{1,2}[./-]\d{2,4}", value))
@@ -69,7 +68,6 @@ def _clean_extracted_fields(extracted: Dict[str, Any]) -> Dict[str, Any]:
     cleaned["source_phone_found"] = _clean_phone(cleaned.get("source_phone_found", ""))
 
     return cleaned
-
 
 
 def _clean_source_text(value: Any) -> str:

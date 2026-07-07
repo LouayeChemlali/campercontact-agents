@@ -62,8 +62,6 @@ def _get_cloud_run_auth_headers(audience_url: str) -> Dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-
-
 def _get_entity_matcher_auth_headers(audience_url: str) -> Dict[str, str]:
     """Return an identity-token auth header for the private Entity Matcher service."""
     if not ENTITY_MATCHER_AUTH:
@@ -114,6 +112,7 @@ def _trigger_entity_matcher(
         "response": response.json(),
     }
 
+
 def _get_hint_generator_auth_headers(audience_url: str) -> Dict[str, str]:
     """Return auth headers for the Hint Generator service."""
     if not HINT_GENERATOR_AUTH:
@@ -154,7 +153,6 @@ def _trigger_hint_generator(
         "endpoint": endpoint,
         "response": response.json(),
     }
-
 
 
 def _get_confidence_agent_auth_headers(audience_url: str) -> Dict[str, str]:
@@ -359,7 +357,6 @@ def run_gap_detector(payload: Optional[Dict[str, Any]] = None):
             limit=confidence_agent_limit,
             write_bigquery=bool(payload.get("write_bigquery", True)),
         )
-
 
     return {
         "status": "completed",

@@ -11,7 +11,6 @@ from .config import PROJECT_ID, QUEUE_DATASET, QUEUE_TABLE
 from .core import run_source_finder
 
 
-
 def _queue_table_id() -> str:
     return f"{PROJECT_ID}.{QUEUE_DATASET}.{QUEUE_TABLE}"
 

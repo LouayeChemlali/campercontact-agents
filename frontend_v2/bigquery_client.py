@@ -26,7 +26,6 @@ def get_client() -> bigquery.Client:
 
 
 # confidence results are the single source of truth for everything the frontend shows
-
 def get_recent_profiles(client: bigquery.Client, limit: int = 10) -> list[dict]:
     """Return recently processed profiles from the final confidence table."""
     query = f"""
@@ -238,8 +237,7 @@ def _max_created_at(hints: list[dict]):
         return values[0]
 
 
-# Priority queue: /queue
-
+# queries behind the /queue page
 def get_queue_stats(client: bigquery.Client) -> dict:
     """Return aggregate statistics about the full priority queue."""
     defaults: dict = {
@@ -344,8 +342,7 @@ def get_priority_queue(
         return []
 
 
-# Profile lookup: /profile/<profile_id>
-
+# queries behind the /profile/<profile_id> page
 def get_hints_for_profile(client: bigquery.Client, profile_id: str) -> list[dict]:
     """Return the most recent Confidence Agent hints for a profile."""
     query = f"""

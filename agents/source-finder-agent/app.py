@@ -55,7 +55,6 @@ def run_source_finder_endpoint():
         }), 500
 
 
-
 @app.post("/run-pending-source-finder")
 def run_pending_source_finder_endpoint():
     payload = request.get_json(silent=True) or {}

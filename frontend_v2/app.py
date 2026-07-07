@@ -29,7 +29,6 @@ _MAX_IDS = 50
 
 
 # template filters
-
 @app.template_filter("datetimeformat")
 def datetimeformat(value):
     """Format a datetime as '23 Jun 2026, 08:07' in Amsterdam local time."""
@@ -56,7 +55,6 @@ def thousands_filter(n):
 
 
 # routes
-
 @app.route("/")
 def index():
     """Input page: profile ID form and recently processed list."""
@@ -251,8 +249,7 @@ def view_profile(profile_id):
     )
 
 
-# Helpers
-
+# helpers
 def _parse_ids(raw: str) -> list[str]:
     """Split comma/newline input, keep only non-empty numeric strings, deduplicated."""
     seen: set[str] = set()
